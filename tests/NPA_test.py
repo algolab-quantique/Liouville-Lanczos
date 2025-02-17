@@ -5,6 +5,7 @@ from qiskit.circuit.library import EfficientSU2, PauliEvolutionGate  # TwoLocal,
 from qiskit.transpiler import CouplingMap
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 from qiskit_ibm_runtime.fake_provider import FakeQuebec
+from qiskit_ibm_runtime import QiskitRuntimeService
 from numbers import Number
 from qiskit.synthesis import LieTrotter
 import numpy as np
@@ -229,6 +230,7 @@ def truncation(threshold, S):
 #solve diagonalization problem, find dependence on dimension of krylov subspace. 
 def E_vs_D(H_tilde, S_tilde, threshold_slope):
     GSEs = []
+    ground_states = []
     for d in range(1, len(S_tilde)+1):
         epsilon = threshold_slope*d
         H_temp = H_tilde[0:d, 0:d]
@@ -239,12 +241,48 @@ def E_vs_D(H_tilde, S_tilde, threshold_slope):
         B = V_eps.conj().T @ S_temp @ V_eps
         print(A.shape[0])
         E, c = scipy.linalg.eig(a = A, b = B)
-        GSEs.append(sorted(E)[0])
-    return GSEs
-GSEs = E_vs_D(H_tilde, S_tilde, 1e-8)
+        idx = E.argsort()[::-1]   
+        eigvals = E[idx]
+        eigvecs = c[:,idx]
+        GSEs.append(eigvals[-1])
+        ground_states.append(eigvecs[:,-1])
+    return GSEs, ground_states, V_eps
+GSEs, vecs, V_eps = E_vs_D(H_tilde, S_tilde, 1e-8)
+plt.plot(GSEs)
+#%%
+#try no truncation
+def E_vs_D_test(H_tilde, S_tilde, threshold_slope):
+    GSEs = []
+    ground_states = []
+    for d in range(1, len(S_tilde)+1):
+        epsilon = threshold_slope*d
+        H_temp = H_tilde[0:d, 0:d]
+        S_temp = S_tilde[0:d, 0:d]
+        #solve GEVP
+        E, c = scipy.linalg.eig(a = H_temp, b = S_temp)
+        idx = E.argsort()[::-1]   
+        eigvals = E[idx]
+        eigvecs = c[:,idx]
+        GSEs.append(eigvals[-1])
+        ground_states.append(eigvecs[:,-1])
+    return GSEs, ground_states
+GSEs, vecs = E_vs_D_test(H_tilde, S_tilde, 1e-8)
 plt.plot(GSEs)
 #%%
 #start conjugating observables by circuit elements
+def cx_spo(n_qubits: int, ctrl: int, target: int):
+    cx0 = ['I']*n_qubits
+    cx1 = ['I']*n_qubits
+    cx2 = ['I']*n_qubits
+    cx3 = ['I']*n_qubits
+
+    cx1[n_qubits - 1 - ctrl] = 'Z'
+    cx2[n_qubits - 1 - target] = 'X'
+    cx3[n_qubits - 1 - ctrl] = 'Z'
+    cx3[n_qubits - 1 - target] = 'X'
+
+    cx = SparsePauliOp([''.join(cx0), ''.join(cx1), ''.join(cx2), ''.join(cx3)], [1/2,1/2,1/2,-1/2])
+    return cx
 
 def cx_by_0_spo(n_qubits: int, ctrl: int, target: int):
     #CNOT = 1/2(II + IZ + XI - XZ) where Z is on ctrl, X is on target
@@ -300,7 +338,7 @@ for i in range(10):
 #%%
 H_tilde = np.array(make_H_S_from_vec(real_H, imag_H))
 S_tilde = np.array(make_H_S_from_vec(real_F, imag_F))
-GSEs = E_vs_D(H_tilde, S_tilde, 1e-8)
+GSEs, vecs, V_eps = E_vs_D(H_tilde, S_tilde, 0)
 plt.plot(GSEs)
 #consistent
 #%%
@@ -336,7 +374,9 @@ with Session(backend=backends[bkd]) as session:
     estim_options.resilience_level = 2
     estim_options.default_shots=10000 #shot noise 10000 -> ~0.01, 100000 -> ~0.003
     estim_options.environment.job_tags = []
+    #try PEA instead of gate folding
     estim_options.dynamical_decoupling.enable = True
+    #DD may not help
     estim_options.dynamical_decoupling.sequence_type = 'XpXm'
     estim = EstimatorV2(mode = session ,options=estim_options)
     eps = 1e-5
@@ -352,11 +392,21 @@ with Session(backend=backends[bkd]) as session:
         estim_job = estim.run([pub])
         results.append(estim_job.result())
 #%%
+#fetch results if already ran
+service = QiskitRuntimeService()
+results = []
+tags = ['cy011jecw2k0008jc7n0', 'cy00tzbrta1g0086kn5g', 'cy00mvb9b62g008h432g', 'cy00eqa01rbg008hpndg', 'cy008ka6vek0008r7vv0',
+        'cy002yb9b62g008h41yg','cxzzx959b62g008h41gg','cxzzr30cw2k0008jc4mg', 'cxzzjwvnrmz000851x40','cxzy0ha6vek0008r7kf0']
+for tag in tags:
+    job = service.job(tag)
+    results.append(job.result())
+results = results[::-1]
+#%%
 evs = [result[0].data.evs for result in results]
 real_H_qc, imag_H_qc, real_F_qc, imag_F_qc = [ev[0] for ev in evs], [ev[1] for ev in evs], [ev[2] for ev in evs], [ev[3] for ev in evs]
 H_tilde_qc = np.array(make_H_S_from_vec(real_H_qc, imag_H_qc))
 S_tilde_qc = np.array(make_H_S_from_vec(real_F_qc, imag_F_qc))
-GSEs_qc = E_vs_D(H_tilde_qc, S_tilde_qc, 1e-5)
+GSEs_qc, vecs_qc, V_eps = E_vs_D(H_tilde_qc, S_tilde_qc, 1e-5)
 plt.plot(GSEs_qc)
 #%%
 #try q-ctrl
@@ -416,54 +466,114 @@ plt.legend(['simulation', 'ibm_torino'])
 plt.title('Ground state energy')
 plt.show()
 # %%
+#Now that we have Krylov basis decomposition, want to calculate Green's function
+#Need to generate a list of observables for which to evaluate <psi_i|A|psi_j> on the QC
+#The krylov basis amplitudes of the GS are given by the elements of "vecs"
+#we will add entanglement checkpoints across the chip to make the preparation controlled on 0 easier.
 
+def prep_psi_0_with_checkpoints(qc: QuantumCircuit):
+    qc.cx(12, 9)
+    #
+    qc.cx(9,10)
+    #
+    qc.cx(10,11)
+    qc.cx(9,8)
+    #
+    qc.cx(11,6)
+    qc.cx(8,7)
+    #
+    qc.cx(7,5)
+    qc.cx(6,4)
+    #
+    qc.cx(4,3)
+    qc.cx(5,0)
+    #
+    qc.cx(3,2)
+    #make checkpoints
+    qc.cx(11, 17)
+    qc.cx(4, 16)
+    qc.cx(2, 15)
+    qc.cx(0, 14)
+    qc.cx(7, 13)
+    #undo entanglement on undesired qubits
+    qc.cx(2,3)
+    qc.cx(4,6)
+    qc.cx(11,10)
+    qc.cx(9,8)
+    qc.cx(7,5)
+    return qc
 
-#do not look at this code, horrible
-def cx_spo(n_qubits: int, ctrl: int, target: int):
-    cx0 = ['I']*n_qubits
-    cx1 = ['I']*n_qubits
-    cx2 = ['I']*n_qubits
-    cx3 = ['I']*n_qubits
+def prep_psi_0_by_0_with_checkpoints(qc: QuantumCircuit):
+    qc.cx(12, 9, ctrl_state='0')
+    qc.cx(17, 11, ctrl_state='0')
+    qc.cx(16,4, ctrl_state='0')
+    qc.cx(15,2, ctrl_state='0')
+    qc.cx(14,0, ctrl_state='0')
+    qc.cx(13,7, ctrl_state='0')
+    return qc
+#%%
+circuits = np.ndarray([10,10], dtype= QuantumCircuit)
+O_ij = np.ndarray([10,10], dtype=complex)
+S_ij = np.ndarray([10,10], dtype=complex)
+synth = LieTrotter(reps = 1)
+delta_t = np.pi/40
+time_evol = PauliEvolutionGate(H, delta_t, synthesis = synth)
 
-    cx1[n_qubits - 1 - ctrl] = 'Z'
-    cx2[n_qubits - 1 - target] = 'X'
-    cx3[n_qubits - 1 - ctrl] = 'Z'
-    cx3[n_qubits - 1 - target] = 'X'
+for j in range(10):
+    for i in range(j+1):
+        m = i
+        n = j - i
+        qc = QuantumCircuit(18)
+        qc.h(12)
+        qc = prep_psi_0_with_checkpoints(qc)
+        for t in range(n):
+            qc.append(time_evol, range(12))
+        qc = prep_psi_0_by_0_with_checkpoints(qc)
+        for t in range(m):
+            qc.append(time_evol, range(12))
+        circuits[i][j] = qc.copy()
 
-    cx = SparsePauliOp([''.join(cx0), ''.join(cx1), ''.join(cx2), ''.join(cx3)], [1/2,1/2,1/2,-1/2])
-    return cx
+real_obs_H = SparsePauliOp('XXXXXX', 1) ^ H
+imag_obs_H = SparsePauliOp('YXXXXX', 1) ^ H
 
-def ccx_spo(n_qubits, ctrl1, ctrl2, target):
-    ccx_3q = QuantumCircuit(3)
-    ccx_3q.ccx(0,1,2)
-    ccx_3q = SparsePauliOp.from_operator(Operator(ccx_3q))
-    paulis = []
-    for pauli in ccx_3q.paulis:
-        n_pauli = ['I']*n_qubits
-        n_pauli[n_qubits - 1 - ctrl1] = str(pauli[0])
-        n_pauli[n_qubits - 1 - ctrl2] = str(pauli[1])
-        n_pauli[n_qubits - 1 - target] = str(pauli[2])
-        paulis.append(''.join(n_pauli))
-    return SparsePauliOp(paulis, ccx_3q.coeffs)
+real_obs_S = SparsePauliOp('XXXXXX', 1) ^ SparsePauliOp('I'*12, 1)
+imag_obs_S = SparsePauliOp('YXXXXX', 1) ^ SparsePauliOp('I'*12, 1)
+        
+estim = StatevectorEstimator()
 
-def ccry_spo(n_qubits, ctrl1, ctrl2, target, theta):
-    cry = QuantumCircuit(2)
-    cry.cry(theta,0,1)
-    ccry_3q = QuantumCircuit(3)
-    ccry_3q = ccry_3q.compose(cry.control(1), [0,1,2])
-    ccry_3q = SparsePauliOp.from_operator(Operator(ccry_3q))
-    paulis = []
-    for pauli in ccry_3q.paulis:
-        n_pauli = ['I']*n_qubits
-        n_pauli[n_qubits - 1 - ctrl1] = str(pauli[0])
-        n_pauli[n_qubits - 1 - ctrl2] = str(pauli[1])
-        n_pauli[n_qubits - 1 - target] = str(pauli[2])
-        paulis.append(''.join(n_pauli))
-    return SparsePauliOp(paulis, ccry_3q.coeffs)
+for i in range(10):
+    for j in range(10):
+        if circuits[i][j] is not None:
+            res = estim.run([(circuits[i][j], [real_obs_H, imag_obs_H, real_obs_S, imag_obs_S])])
+            O_ij[i,j] = res.result()[0].data.evs[0] + 1j * res.result()[0].data.evs[1]
+            S_ij[i,j] = res.result()[0].data.evs[2] + 1j * res.result()[0].data.evs[3]
+        else:
+            res = estim.run([(circuits[j][i], [real_obs_H, imag_obs_H, real_obs_S, imag_obs_S])])
+            O_ij[i,j] = res.result()[0].data.evs[0] - 1j * res.result()[0].data.evs[1]
+            S_ij[i,j] = res.result()[0].data.evs[2] - 1j * res.result()[0].data.evs[3]
 
-def ctrl_NPA_component_spo(n_qubits: int, ctrl: int, q0: int, q1: int, theta):
-    #npa component goes like cx(q0, q1) cry(q1, q0) cx(q0, q1)
-    ccx = ccx_spo(n_qubits, ctrl, q0, q1)
-    ccry = ccry_spo(n_qubits, ctrl, q1, q0, theta)
-    
-    return (ccx & ccry & ccx).simplify()
+#%%
+GSEs_new, vecs_new = E_vs_D_test(O_ij, S_ij, 1e-8)
+plt.plot(GSEs_new)
+# %%
+#try to calculate energy
+gammas = vecs_new[-1]
+norm = 0
+for gamma in gammas:
+    norm += gamma.conjugate() * gamma
+#norm = 1, normalized
+energy = (gammas.conjugate().T @ O_ij @ gammas) / (gammas.conjugate().T @ S_ij @ gammas)
+#good answer
+# %%
+#now with truncation:
+GSEs_again, vecs_again, V_eps_again = E_vs_D(O_ij,S_ij,1e-4)
+plt.plot(GSEs_again)
+gammas = V_eps_again @ vecs_again[-1]
+norm = 0
+for gamma in gammas:
+    norm += gamma.conjugate() * gamma
+
+#norm = 1, normalized
+energy = (gammas.conjugate().T @ O_ij @ gammas) / (gammas.conjugate().T @ S_ij @ gammas)
+
+# %%
