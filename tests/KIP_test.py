@@ -218,7 +218,7 @@ from qiskit.quantum_info import Statevector, random_unitary
 
 Hmat = H.to_matrix()
 #generate ground state vectors
-psi_mat = np.ndarray(2**12, dtype = complex)
+psi_mat = np.zeros(2**12, dtype = complex)
 qc = QuantumCircuit(12)
 for qb in [0, 2, 4, 7, 9, 11]:
     qc.x(qb)
@@ -226,13 +226,7 @@ psi_mat += gammas[0] * np.array(Statevector(qc))
 for i in range(9):
     qc.append(time_evol, range(12))
     psi_mat += gammas[i+1] * np.array(Statevector(qc))
-#%%
-qc = QuantumCircuit(5)
-for i in range(5):
-    qc.h(i)
-for i in range(5):
-    for j in range(5):
-        qc.crx(np.random.rand(1),i,j)
+print(np.linalg.norm(psi_mat))
 #%%
 matrix_lanczos = Lanczos(MatrixState_inner_product(psi_mat),Matrix_Liouvillian(),Matrix_sum())
 A = SparsePauliOp('I'*11 + 'Z', 1)
