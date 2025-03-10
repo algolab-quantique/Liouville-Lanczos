@@ -1,5 +1,5 @@
 #%%
-from LiouvilleLanczos.Quantum_computer.QC_lanczos import Liouvillian_spo,smart_inner_product_spo,sum_spo
+from LiouvilleLanczos.Quantum_computer.QC_lanczos import Liouvillian_spo,smart_inner_product_spo,sum_spo, Liouvillian_slo, inner_product_slo, sum_slo
 from LiouvilleLanczos.Quantum_computer.Hamiltonian import Line_Hubbard,BoundaryCondition
 from LiouvilleLanczos.Lanczos import Lanczos
 from LiouvilleLanczos.matrix_impl import MatrixState_inner_product,Matrix_Liouvillian,Matrix_sum
@@ -67,7 +67,15 @@ a_ed,b_ed,mu_ed = matrix_lanczos.polynomial_hybrid(Hmat,C0_mat,[C2_mat],10)
 green_ed = CF_Green(a_ed,b_ed)
 # %% Quantum computer simulation
 eps = 1e-6
-sampler = StatevectorSampler()
+qubit_converter = (JordanWignerMapper())
+SQ_inpro = inner_product_slo(GS_analytical,estimator,qubit_converter,eps)
+SQ_Liou = Liouvillian_slo(eps)
+lanczos = Lanczos(SQ_inpro,SQ_Liou,sum_slo(eps))
+a_sim5,b_sim5,mu_sim5 = lanczos.polynomial_hybrid(Ham,C0,[C2],10,5e-3)
+green_sim = CF_Green(a_sim5,b_sim5)
+#%%
+eps = 1e-6
+sampler = StatevectorSampler(default_shots=10000)
 SQ_inpro = smart_inner_product_spo(GS_analytical,sampler,eps)
 SQ_Liou = Liouvillian_spo(eps)
 lanczos = Lanczos(SQ_inpro,SQ_Liou,sum_spo(eps))

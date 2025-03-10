@@ -1,5 +1,6 @@
 # %%
 from qiskit.quantum_info import SparsePauliOp
+from qiskit import QuantumCircuit
 from qiskit.circuit.library import EfficientSU2  # TwoLocal, ZZFeatureMap, etc
 from qiskit.transpiler import CouplingMap
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
@@ -10,7 +11,7 @@ from qiskit_algorithms import VQE
 from qiskit.primitives import Estimator
 from qiskit_algorithms.optimizers import SPSA, L_BFGS_B
 from scipy.linalg import eigh_tridiagonal, eigvalsh_tridiagonal,polar
-from LiouvilleLanczos.Quantum_computer.VQE_stuff.ansatz import ControllableHEA
+from LiouvilleLanczos.Quantum_computer.VQE_stuff.ansatz import ControllableHEA, Real_NP_ansatz
 
 def Lanczos_valh(H, psi0, eps, iter=200):
     psi_n = psi0 / np.sqrt(psi0 @ psi0)
@@ -105,7 +106,11 @@ H = Heisenberg(1, 12, f_ent_map)
 estimator = Estimator()
 spsa = SPSA(maxiter=600)
 lbfgs = L_BFGS_B()
-E_dict = {}
+E_dict_ESU2 = {}
+E_dict_NPA = {}
+param_dict_ESU2 = {}
+param_dict_NPA = {}
+
 for rep in range(1, 10, 2):
     print(f"reps: {rep}")
     ansatz = EfficientSU2(
@@ -118,7 +123,21 @@ for rep in range(1, 10, 2):
     print("spsa Energy ", sol.optimal_value)
     vqe = VQE(estimator, ansatz, lbfgs, initial_point=sol.optimal_point)
     sol = vqe.compute_minimum_eigenvalue(H)
-    E_dict[rep] = sol.optimal_value
+    E_dict_ESU2[rep] = sol.optimal_value
+    param_dict_ESU2[rep] = sol.optimal_parameters
+    print("bfgs energy ", sol.optimal_value)
+
+    ansatz_NP = QuantumCircuit(12)
+    for i in range(6):
+        ansatz_NP.x(2 * i)
+    ansatz_NP.append(Real_NP_ansatz(12, rep, f_ent_map), range(12))
+    vqe = VQE(estimator, ansatz_NP, spsa)
+    sol = vqe.compute_minimum_eigenvalue(H)
+    print("spsa Energy ", sol.optimal_value)
+    vqe = VQE(estimator, ansatz_NP, lbfgs, initial_point=sol.optimal_point)
+    sol = vqe.compute_minimum_eigenvalue(H)
+    E_dict_NPA[rep] = sol.optimal_value
+    param_dict_NPA[rep] = sol.optimal_parameters
     print("bfgs energy ", sol.optimal_value)
 # %%
 E_dict_c_hea = {}

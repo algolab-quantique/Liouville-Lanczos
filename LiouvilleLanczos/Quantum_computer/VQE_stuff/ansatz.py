@@ -20,6 +20,7 @@ from qiskit.circuit.library import TwoLocal
 from qiskit import QuantumCircuit, QuantumRegister
 from qiskit.circuit.quantumcircuit import QuantumCircuit
 from qiskit.circuit import Gate, Instruction, ParameterVector, Qubit
+from qiskit.circuit.parameterexpression import ParameterValueType, ParameterExpression
 
 import numpy as np
 from qiskit.circuit.library.standard_gates import (
@@ -159,3 +160,20 @@ class ControllableHEA(TwoLocal):
                 qubits = (control_qubits[ctrl_map[qubit_indices[0]]], qubits[0])
             controlled_HEA.append(gate, qubits)
         return controlled_HEA
+
+def Real_NP_ansatz(n_qubits: int, reps: int, ent_map, param_name: str):
+    qc = QuantumCircuit(n_qubits)
+    n_2q_gates = len(ent_map)
+    thetas = ParameterVector(param_name, n_2q_gates * reps)
+    for i in range(len(thetas)):
+        qubit_pair = ent_map[i%n_2q_gates]
+        qc.cx(qubit_pair[0], qubit_pair[1])
+        qc.cry(thetas[i], qubit_pair[1], qubit_pair[0])
+        qc.cx(qubit_pair[0], qubit_pair[1])
+    return qc
+
+
+
+        
+
+
