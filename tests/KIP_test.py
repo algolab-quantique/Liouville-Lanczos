@@ -244,7 +244,6 @@ w = np.linspace(-5.5,5.5,1000)-1e-1j
 plt.plot(w,np.imag(green_ed(w)))
 # %%
 #Now, run the QC simulation
-
 eps = 1e-6
 SQ_inpro = kip
 SQ_Liou = Liouvillian_spo(eps)
@@ -252,4 +251,139 @@ lanczos = Lanczos(SQ_inpro,SQ_Liou,sum_spo(eps))
 a_sim5,b_sim5,mu_sim5 = lanczos.polynomial_hybrid(H,A,B,10,5e-3)
 green_sim = CF_Green(a_sim5,b_sim5)
 plt.plot(w,np.imag(green_sim(w)))
+#save figure
 # %%
+#New Geometry
+#make for marrakesh for now
+#assume 156 qubit circuit input
+def prep_psi_0_with_checkpoints_2_loops(qc: QuantumCircuit):
+    #1
+    qc.cx(24, 4)
+    #2
+    qc.cx(24,15)
+    qc.cx(4,5)
+    #3
+    qc.cx(15,16)
+    qc.cx(5,6)
+    qc.cx(4,3)
+    #4
+    qc.cx(15,14)
+    qc.cx(6,7)
+    qc.cx(3,2)
+    qc.cx(16,17)
+    #5
+    qc.cx(14,13)
+    qc.cx(6,21)
+    qc.cx(7,8)
+    qc.cx(2,1)
+    qc.cx(17,18)
+    #6
+    qc.cx(13,12)
+    qc.cx(2,20)
+    qc.cx(1,0)
+    qc.cx(17,28)
+    qc.cx(18,19)
+    #7
+    qc.cx(13,27)
+    qc.cx(12,11)
+    qc.cx(8,23)
+    qc.cx(19,26)
+    qc.cx(0,22)
+    #8
+    qc.cx(11,25)
+    #undo entanglement on undesired qubits in parallel
+    qc.cx(13,12)
+    qc.cx(15,14)
+    qc.cx(17,16)
+    qc.cx(19,18)
+    qc.cx(8,7)
+    qc.cx(6,5)
+    qc.cx(4,3)
+    qc.cx(2,1)
+    return qc
+
+def prep_psi_0_by_0_with_checkpoints_2_loops(qc: QuantumCircuit):
+    qc.cx(22, 0, ctrl_state='0')
+    qc.cx(20,2, ctrl_state='0')
+    qc.cx(21,6, ctrl_state='0')
+    qc.cx(23,8, ctrl_state='0')
+    qc.cx(26,19, ctrl_state='0')
+    qc.cx(28,17, ctrl_state='0')
+    qc.cx(27,13, ctrl_state='0')
+    qc.cx(25,11, ctrl_state='0')
+    qc.cx(24,4, ctrl_state='0')
+    qc.cx(24,15, ctrl_state='0')
+    return qc
+#%%
+# %%
+#generate Hamiltonian for big loop geometry:
+ent_map = []
+remap = dict()
+for i in range(65, 73):
+    ent_map.append((i, i+1))
+    remap[i] = i-65
+remap[73] = 8
+ent_map.append((77,65))
+remap[77] = 9
+ent_map.append((79,73))
+remap[79] = 10
+ent_map.append((84,77))
+ent_map.append((92,79))
+for i in range(84, 92):
+    ent_map.append((i, i+1))
+    remap[i] = i-73
+remap[92] = 19
+for i, qb in enumerate([57, 58, 64, 74, 78, 83, 93, 97, 98]):
+    remap[qb] = i + 20
+ent_map_sim = [(remap[ent_map[i][0]], remap[ent_map[i][1]]) for i in range(len(ent_map))]
+H_sim = Heisenberg(1, 20, ent_map_sim)
+#%%
+#TEST INITIAL STATE ENERGY
+estim = StatevectorEstimator()
+qc = QuantumCircuit(20)
+for qb in [0, 2, 4, 6, 8, 11, 13, 15, 17, 19]:
+    qc.x(qb)
+res = estim.run([(qc, H_sim)])
+print(res.result()[0].data.evs) #energy is -20
+# %%
+#test controlled circuit architecture
+qc_sim = QuantumCircuit(29)
+qc_sim.h(24)
+qc_sim = prep_psi_0_with_checkpoints_2_loops(qc_sim)
+qc_sim = prep_psi_0_by_0_with_checkpoints_2_loops(qc_sim)
+real_obs_H = SparsePauliOp('XXXXXXXXX', 1) ^ H_sim
+imag_obs_H = SparsePauliOp('YXXXXXXXX', 1) ^ H_sim
+real_obs_S = SparsePauliOp('XXXXXXXXX', 1) ^ SparsePauliOp('I'*20, 1)
+imag_obs_S = SparsePauliOp('YXXXXXXXX', 1) ^ SparsePauliOp('I'*20, 1)
+#%%
+res = estim.run([(qc_sim, [real_obs_H, imag_obs_H])])
+#works, very slow
+# %%
+circuits_sim = np.ndarray([10,10], dtype= QuantumCircuit)
+H_tilde = np.ndarray([10,10], dtype=complex)
+S_tilde = np.ndarray([10,10], dtype=complex)
+time_evol = PauliEvolutionGate(H_sim, delta_t, synthesis = synth)
+for j in range(10):
+    for i in range(j+1):
+        m = i
+        n = j - i
+        qc = QuantumCircuit(29)
+        qc.h(24)
+        qc = prep_psi_0_with_checkpoints_2_loops(qc)
+        for t in range(n):
+            qc.append(time_evol, range(20))
+        qc = prep_psi_0_by_0_with_checkpoints(qc)
+        for t in range(m):
+            qc.append(time_evol, range(20))
+        circuits[i][j] = qc.copy()
+#%%
+for i in range(10):
+    for j in range(10):
+        if circuits[i][j] is not None:
+            res = estim.run([(circuits[i][j], [real_obs_H, imag_obs_H, real_obs_S, imag_obs_S])])
+            H_tilde[i,j] = res.result()[0].data.evs[0] + 1j * res.result()[0].data.evs[1]
+            S_tilde[i,j] = res.result()[0].data.evs[2] + 1j * res.result()[0].data.evs[3]
+        else:
+            res = estim.run([(circuits[j][i], [real_obs_H, imag_obs_H, real_obs_S, imag_obs_S])])
+            H_tilde[i,j] = res.result()[0].data.evs[0] - 1j * res.result()[0].data.evs[1]
+            S_tilde[i,j] = res.result()[0].data.evs[2] - 1j * res.result()[0].data.evs[3]
