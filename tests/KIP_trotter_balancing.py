@@ -115,7 +115,12 @@ def switching_n_circuit(H, i, j, N, dt):
     n, m = balancing_favors_low(i, j, N)
     return general_krylov_circuit(H, n, m, (j-i)*dt, i*dt)
 
-#%%
+
+def switching_n_high_circuit(H, i, j, N, dt):
+    n, m = balancing_favors_high(i, j, N)
+    return general_krylov_circuit(H, n, m, (j-i)*dt, i*dt)
+
+
 def balancing_favors_low(i, j, N, verbose=False):
     nn = j-i
     mm = i
@@ -131,15 +136,30 @@ def balancing_favors_low(i, j, N, verbose=False):
     return n,m
 
 
-def print_balancing_strategy(N, dim):
+def balancing_favors_high(i, j, N, verbose=False):
+    nn = j-i
+    mm = i
+    if nn==0 and mm==0:
+        n=m=N//2
+    else:
+        n = nn*N//(nn+mm)
+        m = mm*N//(nn+mm)
+    while n+m < N: 
+        if nn > mm : n += 1    ## ONLY difference from favor low is the inequality here
+        elif nn < mm : m += 1
+    if verbose: print(f"{i},{j} ->   {nn},{mm} -> {n},{m}  total={n+m}")
+    return n,m
+
+
+def print_balancing_strategy(strategy, N, dim):
     print(f"balancing {N} gates for {dim} krylov states")
     print(f"i,j -> i-j,i -> n,m")
     for j in range(dim):
         for i in range(j+1):
-            balancing_favors_low(i, j, N, verbose=True)
+            strategy(i, j, N, verbose=True)
     print()
 
-# print_balancing_strategy(6,10)
+print_balancing_strategy(balancing_favors_high, 6,10)
 #%%
 def krylov_hamiltonian_and_overlap(H, krylov_circuit, dim=10):
     estimator = StatevectorEstimator()
@@ -225,14 +245,18 @@ if __name__ == "__main__":
     # evaluate_krylov_circuit(H, original_naive_circuit, name="original")
     # evaluate_krylov_circuit(H, naive_circuit, name="naive")
 
-    result_dict = {'fixed':{},'switch':{}}
+    result_dict = {'fixed':{},'switch':{},'high':{}}
     for N in range(2,12,2):
         result_dict['switch'][N]={}
         result_dict['fixed'][N]={}
+        result_dict['high'][N]={}
         for denom in [30,40,60,80]:
             print(f'{N}, {denom}, switching')
             trial_circ = lambda H,i,j: switching_n_circuit(H, i, j, N, dt=np.pi/denom)
             result_dict['switch'][N][denom] = evaluate_krylov_circuit(H, trial_circ, name=f"switch{N}_dt{denom}")
+            print(f'{N}, {denom}, high')
+            trial_circ = lambda H,i,j: switching_n_high_circuit(H, i, j, N, dt=np.pi/denom)
+            result_dict['high'][N][denom] = evaluate_krylov_circuit(H, trial_circ, name=f"high_{N}_dt{denom}")
             print(f'{N}, {denom}, fixed')
             trial_circ = lambda H,i,j: fixed_n_circuit(H, i, j, N, dt=np.pi/denom)
             result_dict['fixed'][N][denom] = evaluate_krylov_circuit(H, trial_circ, name=f"fixed{N}_dt{denom}")
