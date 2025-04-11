@@ -1,12 +1,15 @@
 # %%
-
+import sys
+import pathlib
+import subprocess
+from math import pi
 from numbers import Number
-import json
+from datetime import datetime
 
 import numpy as np
+import pandas as pd
 import scipy as scipy
 import matplotlib.pyplot as plt
-from tqdm import tqdm
 
 from qiskit import QuantumCircuit
 from qiskit.primitives import StatevectorEstimator
@@ -14,7 +17,6 @@ from qiskit.synthesis import LieTrotter
 from qiskit.circuit.library import PauliEvolutionGate
 from qiskit.quantum_info import SparsePauliOp
 
-RESULTS_DIR = "trotter_balancing_results"
 
 def get_heisenberg_hamiltonian_12_qbits(J=1, n=12, ent_map=[(1,0),(2,1),(3,2),(3,4),(4,6),(5,0),(5,7),(8,7),(8,9),(10,9),(10,11),(11,6)]):
     if isinstance(J, Number):
@@ -79,7 +81,7 @@ def prep_psi_0_by_0_with_checkpoints(qc: QuantumCircuit):
 
 
 def original_naive_circuit(H, i, j):
-    time_evol = PauliEvolutionGate(H, np.pi/40, synthesis=LieTrotter(reps = 1))
+    time_evol = PauliEvolutionGate(H, pi/40, synthesis=LieTrotter(reps = 1))
     qc = QuantumCircuit(18)
     m = i
     n = j - i    
@@ -104,7 +106,7 @@ def general_krylov_circuit(H, n_reps, m_reps, n_time, m_time):
 
 
 def naive_circuit(H, i, j):
-    return general_krylov_circuit(H ,j-i, i, np.pi*(j-i)/40, np.pi*i/40)
+    return general_krylov_circuit(H ,j-i, i, pi*(j-i)/40, pi*i/40)
 
 
 def fixed_n_circuit(H, i, j, N, dt):
@@ -159,8 +161,7 @@ def print_balancing_strategy(strategy, N, dim):
             strategy(i, j, N, verbose=True)
     print()
 
-print_balancing_strategy(balancing_favors_high, 6,10)
-#%%
+
 def krylov_hamiltonian_and_overlap(H, krylov_circuit, dim=10):
     estimator = StatevectorEstimator()
     real_obs_H = SparsePauliOp('XXXXXX', 1) ^ H
@@ -232,18 +233,17 @@ def evaluate_krylov_circuit(H, krylov_circuit=naive_circuit, name="naive", dim=1
         solve_generalized_eigenvalue(H_tilde[0:d,0:d], S_tilde[0:d,0:d], 1e-8*d)[0].real
         for d in range(1, dim+1)
     ]
+    gap = min(gs_vs_d) - true_gs if true_gs else None
+    return gs_vs_d, gap
 
-    if true_gs:
-        gap = min(gs_vs_d) - true_gs
-        save_gs_vs_d_figure(gs_vs_d, f"{gap.real:2.3f}_{name}", true_gs)
-        return gap
-    else:
-        save_gs_vs_d_figure(gs_vs_d, name, true_gs)
-  
-if __name__ == "__main__":
+
+# Experiment
+RESULTS_DIR = "trotter_balancing_results"
+
+def main():
     H = get_heisenberg_hamiltonian_12_qbits()
-    # evaluate_krylov_circuit(H, original_naive_circuit, name="original")
-    # evaluate_krylov_circuit(H, naive_circuit, name="naive")
+    evaluate_krylov_circuit(H, original_naive_circuit, name="original")
+    evaluate_krylov_circuit(H, naive_circuit, name="naive")
 
     result_dict = {'fixed':{},'switch':{},'high':{}}
     for N in range(2,12,2):
@@ -252,15 +252,78 @@ if __name__ == "__main__":
         result_dict['high'][N]={}
         for denom in [30,40,60,80]:
             print(f'{N}, {denom}, switching')
-            trial_circ = lambda H,i,j: switching_n_circuit(H, i, j, N, dt=np.pi/denom)
+            trial_circ = lambda H,i,j: switching_n_circuit(H, i, j, N, dt=pi/denom)
             result_dict['switch'][N][denom] = evaluate_krylov_circuit(H, trial_circ, name=f"switch{N}_dt{denom}")
             print(f'{N}, {denom}, high')
-            trial_circ = lambda H,i,j: switching_n_high_circuit(H, i, j, N, dt=np.pi/denom)
+            trial_circ = lambda H,i,j: switching_n_high_circuit(H, i, j, N, dt=pi/denom)
             result_dict['high'][N][denom] = evaluate_krylov_circuit(H, trial_circ, name=f"high_{N}_dt{denom}")
             print(f'{N}, {denom}, fixed')
-            trial_circ = lambda H,i,j: fixed_n_circuit(H, i, j, N, dt=np.pi/denom)
+            trial_circ = lambda H,i,j: fixed_n_circuit(H, i, j, N, dt=pi/denom)
             result_dict['fixed'][N][denom] = evaluate_krylov_circuit(H, trial_circ, name=f"fixed{N}_dt{denom}")
 
-    with open(f'{RESULTS_DIR}/gaps.json', 'w') as fp:
-        json.dump(result_dict, fp)
 
+if __name__ == "__main__":
+    
+    date_str = datetime.today().strftime('%Y-%m-%d')
+    time_str = datetime.today().strftime('%H:%M:%S')
+    git_str = "git" + subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('ascii').strip()    
+
+    rundir = pathlib.Path(__file__).parent/RESULTS_DIR/"-".join([date_str, time_str, git_str]) 
+    rundir.mkdir(parents=True, exist_ok=True)
+    
+    stdout = open(rundir/'stdout.txt', "a")
+    sys.stdout = stdout  # redirect print to the log file
+
+    res = rundir/"results.csv"
+
+    print_balancing_strategy(balancing_favors_high, 6, 10)
+    
+    H = get_heisenberg_hamiltonian_12_qbits()
+    
+    # gs_vs_d, gap = evaluate_krylov_circuit(H, original_naive_circuit, name="original")
+    # df = pd.DataFrame({
+    #                 'strategy': ["original"],
+    #                 'gap': [gap],
+    #                 'dt_denom': [40],
+    #                 'num_gates': [10],
+    #                 'gs_vs_d': [gs_vs_d]
+    #             })
+    # df.to_csv(res, header=None, mode="a") if res.is_file() else df.to_csv(res)
+    
+    # evaluate_krylov_circuit(H, naive_circuit, name="naive")
+    
+    # loop
+
+    # num_gates_list = list(range(2,12,2))
+    # denom_list =[30,40,60,80]
+    # strategies = lambda num_gates: {
+    #     "switch" : lambda H,i,j: switching_n_circuit(H, i, j, num_gates, dt=pi/denom),
+    #     "high" : lambda H,i,j: switching_n_high_circuit(H, i, j, num_gates, dt=pi/denom),
+    #     "fixed" : lambda H,i,j: fixed_n_circuit(H, i, j, num_gates, dt=pi/denom),
+    # }
+
+    num_gates_list = list(range(4,6,2))
+    denom_list =[40]
+    strategies = lambda num_gates: {
+        # "switch" : lambda H,i,j: switching_n_circuit(H, i, j, num_gates, dt=pi/denom),
+        "high" : lambda H,i,j: switching_n_high_circuit(H, i, j, num_gates, dt=pi/denom),
+        "fixed" : lambda H,i,j: fixed_n_circuit(H, i, j, num_gates, dt=pi/denom),
+    }
+
+    for denom in denom_list:
+        for num_gates in num_gates_list:
+            for strategy, trial_circ in strategies(num_gates).items():
+                gs_vs_d, gap = evaluate_krylov_circuit(H, trial_circ, name=f"{strategy}_{num_gates}_dt{denom}", dim=6)
+
+                df = pd.DataFrame({
+                    'strategy': [strategy],
+                    'gap': [gap],
+                    'dt_denom': [denom],
+                    'num_gates': [num_gates],
+                    'gs_vs_d': [gs_vs_d]
+                })
+                df.to_csv(res, header=None, mode="a") if res.is_file() else df.to_csv(res)
+
+    # allres = pd.read_csv(res)
+    # allres.plot('gap')
+    # plt.show()
