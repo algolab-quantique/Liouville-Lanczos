@@ -17,6 +17,7 @@ from qiskit.synthesis import LieTrotter
 from qiskit.circuit.library import PauliEvolutionGate
 from qiskit.quantum_info import SparsePauliOp
 
+RESULTS_DIR = pathlib.Path(__file__).parent/"trotter_balancing_results"
 
 def get_heisenberg_hamiltonian_12_qbits(J=1, n=12, ent_map=[(1,0),(2,1),(3,2),(3,4),(4,6),(5,0),(5,7),(8,7),(8,9),(10,9),(10,11),(11,6)]):
     if isinstance(J, Number):
@@ -95,7 +96,9 @@ def original_naive_circuit(H, i, j):
     return qc.copy()
 
 
-def general_krylov_circuit(H, n_reps, m_reps, n_time, m_time):
+## Hadamard tests
+
+def general_hadamard_test_circuit(H, n_reps, m_reps, n_time, m_time):
     qc = QuantumCircuit(18)
     qc.h(12)
     qc = prep_psi_0_with_checkpoints(qc)
@@ -106,22 +109,24 @@ def general_krylov_circuit(H, n_reps, m_reps, n_time, m_time):
 
 
 def naive_circuit(H, i, j):
-    return general_krylov_circuit(H ,j-i, i, pi*(j-i)/40, pi*i/40)
+    return general_hadamard_test_circuit(H ,j-i, i, pi*(j-i)/40, pi*i/40)
 
 
 def fixed_n_circuit(H, i, j, N, dt):
-    return general_krylov_circuit(H, N//2, N//2, (j-i)*dt, i*dt)
+    return general_hadamard_test_circuit(H, N//2, N//2, (j-i)*dt, i*dt)
 
 
 def switching_n_circuit(H, i, j, N, dt):
     n, m = balancing_favors_low(i, j, N)
-    return general_krylov_circuit(H, n, m, (j-i)*dt, i*dt)
+    return general_hadamard_test_circuit(H, n, m, (j-i)*dt, i*dt)
 
 
 def switching_n_high_circuit(H, i, j, N, dt):
     n, m = balancing_favors_high(i, j, N)
-    return general_krylov_circuit(H, n, m, (j-i)*dt, i*dt)
+    return general_hadamard_test_circuit(H, n, m, (j-i)*dt, i*dt)
 
+
+## Balancing strategies
 
 def balancing_favors_low(i, j, N, verbose=False):
     nn = j-i
@@ -203,24 +208,6 @@ def solve_generalized_eigenvalue(H, S, threshold=1e-9):
     return gs_energy, gs_vector, P
 
 
-def save_gs_vs_d_figure(gs_vs_d, path, gap=None):
-    
-    fig, ax = plt.subplots(1,1)
-    ax.set_xlabel("krylov dimension")
-    ax.set_ylabel("lowest energy")
-    ax.set_ylim(-22,-12)    
-    # saved_gs_vs_d = [-12.0, -16.898, -19.042, -20.017, -20.498, -20.735, -20.862, -21.026, -21.21, -21.293]
-    # ax.plot(list(range(1,11)), saved_gs_vs_d, color='0.6', linestyle="dashed")
-    ax.plot(list(range(1,11)), gs_vs_d)
-
-    if gap is not None:
-        true_gs = min(gs_vs_d) - gap
-        ax.hlines(true_gs, 0, 10, color='k', linestyles="dotted", label="true GS")
-    
-    plt.savefig(path)
-    plt.close()
-
-
 def evaluate_krylov_circuit(H, krylov_circuit=naive_circuit, dim=10, true_gs=-21.5496, treshold_factor=1e-8):
     if isinstance(true_gs, Number):
         true_gs = true_gs
@@ -242,26 +229,9 @@ def evaluate_krylov_circuit(H, krylov_circuit=naive_circuit, dim=10, true_gs=-21
     return gs_vs_d, gap
 
 
-def save_to_csv(path, **kwargs):
-    df = pd.DataFrame({k:[v] for k,v in kwargs.items()})
-    if path.is_file():
-        df.to_csv(path, header=None, mode="a")  
-    else: 
-        df.to_csv(path)
-
-
-
-# def check_existance(dict_of_values, df):
-#     v = df.iloc[:, 0] == df.iloc[:, 0]
-#     for key, value in dict_of_values.items():
-#         v &= (df[key] == value)
-#     return v.any()
-
-
-
-def rundir():
+def new_rundir():
     date_str = datetime.today().strftime('%Y-%m-%d')
-    time_str = datetime.today().strftime('%H:%M:%S')
+    time_str = datetime.today().strftime('%H-%M-%S')
     git_str = "git" + subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('ascii').strip()    
 
     rundir = RESULTS_DIR/"-".join([date_str, time_str, git_str]) 
@@ -273,42 +243,81 @@ def rundir():
     return rundir
 
 
-# Experiment
-RESULTS_DIR = pathlib.Path(__file__).parent/"trotter_balancing_results"
+def save_to_csv(path, **kwargs):
+    df = pd.DataFrame({k:[v] for k,v in kwargs.items()})
+    if path.is_file():
+        df.to_csv(path, header=None, mode="a")  
+    else: 
+        df.to_csv(path)
 
-def run_experiment():    
-    csv_path = rundir() / "results.csv"
-    
+# Experiment
+def run_original_experiment(csv_path):
     H = get_heisenberg_hamiltonian_12_qbits()
-        
-    for treshold in [1e-8, 1e-2]:
-        for denom in [30,40,60,80]:
-            for num_gates in [2,4,6,8,10]:
-                for strategy, strategy_circ in {
-                    "switch" : switching_n_circuit,
-                    "high" : switching_n_high_circuit,
-                    "fixed" : fixed_n_circuit,
-                }.items():
-                    trial_circ = lambda H,i,j: strategy_circ(H, i, j, num_gates, dt=pi/denom)
-                    gs_vs_d, gap = evaluate_krylov_circuit(H, trial_circ, dim=10, treshold_factor=treshold)
-                    save_to_csv(csv_path, 
-                        strategy=strategy, dt_denom=denom, num_gates=num_gates, treshold=treshold, 
-                        gap=gap, gs_vs_d=gs_vs_d
-                    )
-                    
+
     gs_vs_d, gap = evaluate_krylov_circuit(H, original_naive_circuit)
     save_to_csv(csv_path, strategy="original", dt_denom=40, num_gates=10, treshold=1e-8, gap=gap, gs_vs_d=gs_vs_d)
 
     gs_vs_d, gap = evaluate_krylov_circuit(H, naive_circuit)
     save_to_csv(csv_path, strategy="original", dt_denom=40, num_gates=10, treshold=1e-8, gap=gap, gs_vs_d=gs_vs_d)
+
+
+def run_simulation(csv_path, continue_from=None):
+    H = get_heisenberg_hamiltonian_12_qbits()
+
+    if continue_from:
+        prev_csv_path = continue_from/"results.csv"
+        prev_df = pd.read_csv(prev_csv_path)
+        if csv_path.is_file():
+            prev_df.to_csv(csv_path, header=None, mode="a")  
+        else:
+            prev_df.to_csv(csv_path)
+
+    for treshold in [1e-1, 1e-2, 1e-4, 1e-8, 1e-14]:
+        for denom in [40]:
+            for num_gates in [6]:
+                for strategy, strategy_circ in {
+                    "switch" : switching_n_circuit,
+                    "high" : switching_n_high_circuit,
+                    "fixed" : fixed_n_circuit,
+                }.items():
+                    is_already_done = False
+                    if continue_from:
+                        id_dict = dict(strategy=strategy, dt_denom=denom, num_gates=num_gates, treshold=treshold)
+                        is_already_done = check_existance(id_dict, prev_df)
+                    if continue_from and is_already_done:
+                        print(f"skipping {id_dict}")
+                    else:
+                        trial_circ = lambda H,i,j: strategy_circ(H, i, j, num_gates, dt=pi/denom)
+                        gs_vs_d, gap = evaluate_krylov_circuit(H, trial_circ, dim=10, treshold_factor=treshold)
+                        save_to_csv(csv_path, gap=gap, gs_vs_d=gs_vs_d **id_dict)
+                    
     
 
-if __name__ == "__main__":
+def check_existance(id_dict, df):
+    v = df.iloc[:, 0] == df.iloc[:, 0]
+    for key, value in id_dict.items():
+        v &= (df[key] == value)
+    return v.any()         
 
-    path = pathlib.Path(__file__).parent/RESULTS_DIR/"latest"
+
+def save_gs_vs_d_figure(gs_vs_d, path, gap=None):
+    
+    fig, ax = plt.subplots(1,1)
+    ax.set_xlabel("krylov dimension")
+    ax.set_ylabel("lowest energy")
+    ax.set_ylim(-22,-12)    
+    ax.plot(list(range(1,11)), gs_vs_d)
+
+    if gap is not None:
+        true_gs = min(gs_vs_d) - gap
+        ax.hlines(true_gs, 0, 10, color='k', linestyles="dotted", label="true GS")
+    
+    plt.savefig(path)
+    plt.close()
+
+
+def make_figures(path):
     csv_path = path/"results.csv"
-
-
     df = pd.read_csv(csv_path)
     list_of_dict = df.to_dict(orient='records')
 
@@ -321,9 +330,21 @@ if __name__ == "__main__":
         gap = d['gap']
 
         name = f"{strategy}{num_gates}_pi{denom}_tresh{treshold}"
+        
         if gap:
-            save_gs_vs_d_figure(gs_vs_d, path/f"{gap.real:2.3f}_{name}.jpg", gap)
+            file = path/f"{gap.real:2.3f}_{name}.jpg"
         else:
-            save_gs_vs_d_figure(gs_vs_d, path/f"{name}.jpg")
+            file = path/f"{name}.jpg"
+        
+        if file.exists:
+            print(f"skipping {name}")
+        else:
+            save_gs_vs_d_figure(gs_vs_d, file, gap)
 
+
+if __name__ == "__main__":
+    LATEST = RESULTS_DIR/"latest"
+    run_simulation(new_rundir()/"results.csv", continue_from=LATEST)
+
+    # make_figures(LATEST)
 
