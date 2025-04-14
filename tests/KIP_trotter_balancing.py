@@ -203,21 +203,22 @@ def solve_generalized_eigenvalue(H, S, threshold=1e-9):
     return gs_energy, gs_vector, P
 
 
-def save_gs_vs_d_figure(gs_vs_d, title, true_gs=None):
+def save_gs_vs_d_figure(gs_vs_d, path, gap=None):
     
-    saved_gs_vs_d = [-12.0, -16.898, -19.042, -20.017, -20.498, -20.735, -20.862, -21.026, -21.21, -21.293]
     fig, ax = plt.subplots(1,1)
     ax.set_xlabel("krylov dimension")
     ax.set_ylabel("lowest energy")
     ax.set_ylim(-22,-12)    
-    ax.plot(list(range(1,11)), saved_gs_vs_d, color='0.6', linestyle="dashed")
+    # saved_gs_vs_d = [-12.0, -16.898, -19.042, -20.017, -20.498, -20.735, -20.862, -21.026, -21.21, -21.293]
+    # ax.plot(list(range(1,11)), saved_gs_vs_d, color='0.6', linestyle="dashed")
     ax.plot(list(range(1,11)), gs_vs_d)
 
-    if true_gs is not None:
+    if gap is not None:
+        true_gs = min(gs_vs_d) - gap
         ax.hlines(true_gs, 0, 10, color='k', linestyles="dotted", label="true GS")
     
-    plt.savefig(f"{RESULTS_DIR}/{title}.jpg")
-    plt.clf()
+    plt.savefig(path)
+    plt.close()
 
 
 def evaluate_krylov_circuit(H, krylov_circuit=naive_circuit, dim=10, true_gs=-21.5496, treshold_factor=1e-8):
@@ -241,44 +242,42 @@ def evaluate_krylov_circuit(H, krylov_circuit=naive_circuit, dim=10, true_gs=-21
     return gs_vs_d, gap
 
 
-# Experiment
-RESULTS_DIR = "trotter_balancing_results"
+def save_to_csv(path, **kwargs):
+    df = pd.DataFrame({k:[v] for k,v in kwargs.items()})
+    if path.is_file():
+        df.to_csv(path, header=None, mode="a")  
+    else: 
+        df.to_csv(path)
 
-def main():
-    # Setup
+
+
+# def check_existance(dict_of_values, df):
+#     v = df.iloc[:, 0] == df.iloc[:, 0]
+#     for key, value in dict_of_values.items():
+#         v &= (df[key] == value)
+#     return v.any()
+
+
+
+def rundir():
     date_str = datetime.today().strftime('%Y-%m-%d')
     time_str = datetime.today().strftime('%H:%M:%S')
     git_str = "git" + subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('ascii').strip()    
 
-    rundir = pathlib.Path(__file__).parent/RESULTS_DIR/"-".join([date_str, time_str, git_str]) 
+    rundir = RESULTS_DIR/"-".join([date_str, time_str, git_str]) 
     rundir.mkdir(parents=True, exist_ok=True)
     
-    stdout = open(rundir/'stdout.txt', "a")
-    sys.stdout = stdout  # redirect print to the log file
+    stdout_path = open(rundir/'stdout.txt', "a")
+    sys.stdout = stdout_path  # redirect print to the log file
 
-    def save_to_csv(strategy, gap, denom, treshold, num_gates, gs_vs_d, path=rundir/"results.csv"):
-        df = pd.DataFrame({
-            'strategy': [strategy],
-            'gap': [gap],
-            'dt_denom': [denom],
-            'num_gates': [num_gates],
-            'gs_vs_d': [gs_vs_d],
-            'treshold': [treshold],
-        })
-        if path.is_file():
-            df.to_csv(path, header=None, mode="a")  
-        else: 
-            df.to_csv(path)
+    return rundir
 
 
-    def check_existance(dict_of_values, df):
-        v = df.iloc[:, 0] == df.iloc[:, 0]
-        for key, value in dict_of_values.items():
-            v &= (df[key] == value)
-        return v.any()
+# Experiment
+RESULTS_DIR = pathlib.Path(__file__).parent/"trotter_balancing_results"
 
-
-    # Experiment
+def run_experiment():    
+    csv_path = rundir() / "results.csv"
     
     H = get_heisenberg_hamiltonian_12_qbits()
         
@@ -292,20 +291,39 @@ def main():
                 }.items():
                     trial_circ = lambda H,i,j: strategy_circ(H, i, j, num_gates, dt=pi/denom)
                     gs_vs_d, gap = evaluate_krylov_circuit(H, trial_circ, dim=10, treshold_factor=treshold)
-                    save_to_csv(strategy, gap, denom, treshold, num_gates, gs_vs_d)
-
+                    save_to_csv(csv_path, 
+                        strategy=strategy, dt_denom=denom, num_gates=num_gates, treshold=treshold, 
+                        gap=gap, gs_vs_d=gs_vs_d
+                    )
+                    
     gs_vs_d, gap = evaluate_krylov_circuit(H, original_naive_circuit)
-    save_to_csv("original", gap, 40, 1e-8, 10, gs_vs_d)
-        
-    gs_vs_d, gap = evaluate_krylov_circuit(H, naive_circuit)
-    save_to_csv("naive", gap, 40, 1e-8, 10, gs_vs_d)
+    save_to_csv(csv_path, strategy="original", dt_denom=40, num_gates=10, treshold=1e-8, gap=gap, gs_vs_d=gs_vs_d)
 
+    gs_vs_d, gap = evaluate_krylov_circuit(H, naive_circuit)
+    save_to_csv(csv_path, strategy="original", dt_denom=40, num_gates=10, treshold=1e-8, gap=gap, gs_vs_d=gs_vs_d)
+    
 
 if __name__ == "__main__":
-    # main()
 
-    results = pathlib.Path(__file__).parent/RESULTS_DIR/"latest"/"results.csv"
-    allres = pd.read_csv(results)
+    path = pathlib.Path(__file__).parent/RESULTS_DIR/"latest"
+    csv_path = path/"results.csv"
 
-    allres.loc[allres['strategy']=='fixed'].groupby('treshold').plot(x='num_gates', y='gap')
-    plt.show()
+
+    df = pd.read_csv(csv_path)
+    list_of_dict = df.to_dict(orient='records')
+
+    for d in list_of_dict:
+        strategy = d['strategy']
+        num_gates = d['num_gates']
+        denom = d['dt_denom']
+        treshold = d['treshold']
+        gs_vs_d = np.asarray(eval(d['gs_vs_d']))
+        gap = d['gap']
+
+        name = f"{strategy}{num_gates}_pi{denom}_tresh{treshold}"
+        if gap:
+            save_gs_vs_d_figure(gs_vs_d, path/f"{gap.real:2.3f}_{name}.jpg", gap)
+        else:
+            save_gs_vs_d_figure(gs_vs_d, path/f"{name}.jpg")
+
+
