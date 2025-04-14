@@ -220,7 +220,7 @@ def save_gs_vs_d_figure(gs_vs_d, title, true_gs=None):
     plt.clf()
 
 
-def evaluate_krylov_circuit(H, krylov_circuit=naive_circuit, name="naive", dim=10, true_gs=-21.5496):
+def evaluate_krylov_circuit(H, krylov_circuit=naive_circuit, dim=10, true_gs=-21.5496, treshold_factor=1e-8):
     if isinstance(true_gs, Number):
         true_gs = true_gs
     elif true_gs:
@@ -230,7 +230,11 @@ def evaluate_krylov_circuit(H, krylov_circuit=naive_circuit, name="naive", dim=1
 
     H_tilde, S_tilde = krylov_hamiltonian_and_overlap(H, krylov_circuit, dim=dim)    
     gs_vs_d = [
-        solve_generalized_eigenvalue(H_tilde[0:d,0:d], S_tilde[0:d,0:d], 1e-8*d)[0].real
+        solve_generalized_eigenvalue(
+            H_tilde[0:d,0:d], 
+            S_tilde[0:d,0:d], 
+            threshold=treshold_factor*d
+        )[0].real
         for d in range(1, dim+1)
     ]
     gap = min(gs_vs_d) - true_gs if true_gs else None
@@ -241,29 +245,7 @@ def evaluate_krylov_circuit(H, krylov_circuit=naive_circuit, name="naive", dim=1
 RESULTS_DIR = "trotter_balancing_results"
 
 def main():
-    H = get_heisenberg_hamiltonian_12_qbits()
-    evaluate_krylov_circuit(H, original_naive_circuit, name="original")
-    evaluate_krylov_circuit(H, naive_circuit, name="naive")
-
-    result_dict = {'fixed':{},'switch':{},'high':{}}
-    for N in range(2,12,2):
-        result_dict['switch'][N]={}
-        result_dict['fixed'][N]={}
-        result_dict['high'][N]={}
-        for denom in [30,40,60,80]:
-            print(f'{N}, {denom}, switching')
-            trial_circ = lambda H,i,j: switching_n_circuit(H, i, j, N, dt=pi/denom)
-            result_dict['switch'][N][denom] = evaluate_krylov_circuit(H, trial_circ, name=f"switch{N}_dt{denom}")
-            print(f'{N}, {denom}, high')
-            trial_circ = lambda H,i,j: switching_n_high_circuit(H, i, j, N, dt=pi/denom)
-            result_dict['high'][N][denom] = evaluate_krylov_circuit(H, trial_circ, name=f"high_{N}_dt{denom}")
-            print(f'{N}, {denom}, fixed')
-            trial_circ = lambda H,i,j: fixed_n_circuit(H, i, j, N, dt=pi/denom)
-            result_dict['fixed'][N][denom] = evaluate_krylov_circuit(H, trial_circ, name=f"fixed{N}_dt{denom}")
-
-
-if __name__ == "__main__":
-    
+    # Setup
     date_str = datetime.today().strftime('%Y-%m-%d')
     time_str = datetime.today().strftime('%H:%M:%S')
     git_str = "git" + subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('ascii').strip()    
@@ -274,56 +256,56 @@ if __name__ == "__main__":
     stdout = open(rundir/'stdout.txt', "a")
     sys.stdout = stdout  # redirect print to the log file
 
-    res = rundir/"results.csv"
+    def save_to_csv(strategy, gap, denom, treshold, num_gates, gs_vs_d, path=rundir/"results.csv"):
+        df = pd.DataFrame({
+            'strategy': [strategy],
+            'gap': [gap],
+            'dt_denom': [denom],
+            'num_gates': [num_gates],
+            'gs_vs_d': [gs_vs_d],
+            'treshold': [treshold],
+        })
+        if path.is_file():
+            df.to_csv(path, header=None, mode="a")  
+        else: 
+            df.to_csv(path)
 
-    print_balancing_strategy(balancing_favors_high, 6, 10)
+
+    def check_existance(dict_of_values, df):
+        v = df.iloc[:, 0] == df.iloc[:, 0]
+        for key, value in dict_of_values.items():
+            v &= (df[key] == value)
+        return v.any()
+
+
+    # Experiment
     
     H = get_heisenberg_hamiltonian_12_qbits()
-    
-    # gs_vs_d, gap = evaluate_krylov_circuit(H, original_naive_circuit, name="original")
-    # df = pd.DataFrame({
-    #                 'strategy': ["original"],
-    #                 'gap': [gap],
-    #                 'dt_denom': [40],
-    #                 'num_gates': [10],
-    #                 'gs_vs_d': [gs_vs_d]
-    #             })
-    # df.to_csv(res, header=None, mode="a") if res.is_file() else df.to_csv(res)
-    
-    # evaluate_krylov_circuit(H, naive_circuit, name="naive")
-    
-    # loop
+        
+    for treshold in [1e-8, 1e-2]:
+        for denom in [30,40,60,80]:
+            for num_gates in [2,4,6,8,10]:
+                for strategy, strategy_circ in {
+                    "switch" : switching_n_circuit,
+                    "high" : switching_n_high_circuit,
+                    "fixed" : fixed_n_circuit,
+                }.items():
+                    trial_circ = lambda H,i,j: strategy_circ(H, i, j, num_gates, dt=pi/denom)
+                    gs_vs_d, gap = evaluate_krylov_circuit(H, trial_circ, dim=10, treshold_factor=treshold)
+                    save_to_csv(strategy, gap, denom, treshold, num_gates, gs_vs_d)
 
-    # num_gates_list = list(range(2,12,2))
-    # denom_list =[30,40,60,80]
-    # strategies = lambda num_gates: {
-    #     "switch" : lambda H,i,j: switching_n_circuit(H, i, j, num_gates, dt=pi/denom),
-    #     "high" : lambda H,i,j: switching_n_high_circuit(H, i, j, num_gates, dt=pi/denom),
-    #     "fixed" : lambda H,i,j: fixed_n_circuit(H, i, j, num_gates, dt=pi/denom),
-    # }
+    gs_vs_d, gap = evaluate_krylov_circuit(H, original_naive_circuit)
+    save_to_csv("original", gap, 40, 1e-8, 10, gs_vs_d)
+        
+    gs_vs_d, gap = evaluate_krylov_circuit(H, naive_circuit)
+    save_to_csv("naive", gap, 40, 1e-8, 10, gs_vs_d)
 
-    num_gates_list = list(range(4,6,2))
-    denom_list =[40]
-    strategies = lambda num_gates: {
-        # "switch" : lambda H,i,j: switching_n_circuit(H, i, j, num_gates, dt=pi/denom),
-        "high" : lambda H,i,j: switching_n_high_circuit(H, i, j, num_gates, dt=pi/denom),
-        "fixed" : lambda H,i,j: fixed_n_circuit(H, i, j, num_gates, dt=pi/denom),
-    }
 
-    for denom in denom_list:
-        for num_gates in num_gates_list:
-            for strategy, trial_circ in strategies(num_gates).items():
-                gs_vs_d, gap = evaluate_krylov_circuit(H, trial_circ, name=f"{strategy}_{num_gates}_dt{denom}", dim=6)
+if __name__ == "__main__":
+    # main()
 
-                df = pd.DataFrame({
-                    'strategy': [strategy],
-                    'gap': [gap],
-                    'dt_denom': [denom],
-                    'num_gates': [num_gates],
-                    'gs_vs_d': [gs_vs_d]
-                })
-                df.to_csv(res, header=None, mode="a") if res.is_file() else df.to_csv(res)
+    results = pathlib.Path(__file__).parent/RESULTS_DIR/"latest"/"results.csv"
+    allres = pd.read_csv(results)
 
-    # allres = pd.read_csv(res)
-    # allres.plot('gap')
-    # plt.show()
+    allres.loc[allres['strategy']=='fixed'].groupby('treshold').plot(x='num_gates', y='gap')
+    plt.show()
