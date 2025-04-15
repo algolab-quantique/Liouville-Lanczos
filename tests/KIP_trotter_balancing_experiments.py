@@ -3,7 +3,7 @@ import shutil
 import sys
 import subprocess
 from datetime import datetime
-import pathlib
+from pathlib import Path
 from copy import copy
 
 import numpy as np
@@ -24,22 +24,22 @@ from KIP_trotter_balancing import (
     SuzukiTrotter,
 )
 
-RESULTS_DIR = pathlib.Path(__file__).parent/"trotter_balancing_results"
+
+
+# Parameters
+
+
+RESULTS_DIR = Path(__file__).parent/"trotter_balancing_results"
+
+SEP = "\t"
 
 CONFIG_SPACE = {
         'num_gates': [4, 6, 8],
         'treshold': [1e-1, 1e-4, 1e-8, 0],
         'dt_denom': [20, 30, 40, 50],
-        'strategy': {
-            "low": switching_n_circuit,
-            "high": switching_n_high_circuit,
-            "fixed": fixed_n_circuit,
-        },
-        'synthesis': {
-            "LieTrotter": LieTrotter,
-            "SuzukiTrotter": SuzukiTrotter,
-        },
-    }
+        'strategy': ["low", "high", "fixed"],
+        'synthesis': ["LieTrotter", "SuzukiTrotter"],
+}
 
 RESULT_KEYS = [ 
     'gap',
@@ -58,8 +58,27 @@ DEFAULT_VALUE = {
     'git': None,
 }
 
+STRATEGY_MAP = {
+    "low": switching_n_circuit,
+    "high": switching_n_high_circuit,
+    "fixed": fixed_n_circuit,
+}
 
-def generate_all_combinations(config_space=CONFIG_SPACE):
+SYNTHESIS_MAP = {
+    "LieTrotter": LieTrotter,
+    "SuzukiTrotter": SuzukiTrotter,
+}
+
+
+def generate_all_combinations(config_space: dict[list] = CONFIG_SPACE) -> list[dict]:
+    '''Generates a list of dict covering all combinations of key values in 
+
+    Args:
+        config_space (dict, optional): Keys should map to lists of possible values. Defaults to CONFIG_SPACE.
+
+    Returns:
+        list of dict: List of all combinations where keys map to single values
+    '''    
     list_of_config_dicts = [{}]
     for key in config_space:
         new_list_of_config_dicts = []
@@ -72,16 +91,37 @@ def generate_all_combinations(config_space=CONFIG_SPACE):
     return list_of_config_dicts
 
 
-def get_git_hash():
+def config_name(config: dict) -> str:
+    '''returns a name based on the content of `config`'''    
+    #"_".join([k[0]+str(v) for k, v in config.items()])  # More general version
+    name = config['strategy']
+    name += f"{config['num_gates']}"
+    name += f"_pi{config['dt_denom']}"
+    name += f"_tresh{config['treshold']}"
+    return name
+
+# Utilities
+
+
+def get_git_hash() -> str:
+    '''Retrieves the current commit's short hash'''    
     return "git" + subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('ascii').strip()
 
 
-def new_rundir():
+def new_rundir(parent: Path = RESULTS_DIR) -> Path:
+    '''Create directory named from datetime and git hash as "yyyy-mm-dd-hh-mm-ss-hash"
+
+    Args:
+        parent (Path, optional): Target location. Defaults to this file's location/trotter_balancing_results/
+    
+    Returns:
+        Path: New directory
+    '''    
     date_str = datetime.today().strftime('%Y-%m-%d')
     time_str = datetime.today().strftime('%H-%M-%S')
     git_str = "git" + subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('ascii').strip()    
 
-    rundir = RESULTS_DIR/"-".join([date_str, time_str, git_str]) 
+    rundir = parent/"-".join([date_str, time_str, git_str]) 
     rundir.mkdir(parents=True, exist_ok=True)
     
     stdout_path = open(rundir/'stdout.txt', "a")
@@ -90,15 +130,57 @@ def new_rundir():
     return rundir
 
 
-def save_to_csv(path, **kwargs):
+def save_to_csv(path: Path, **kwargs):
+    '''Append all keywords argument as a row to a .csv file
+
+    Args:
+        path (pathlib.Path): location of the .csv file
+        **kwargs (Any): key-value pairs to fill the row
+    '''    
     df = pd.DataFrame({k:[v] for k,v in kwargs.items()})
     if path.is_file():
-        df.to_csv(path, index=False, sep="\t", header=None, mode="a")  
+        df.to_csv(path, index=False, sep=SEP, header=None, mode="a")  
     else: 
-        df.to_csv(path, index=False, sep="\t")
+        df.to_csv(path, index=False, sep=SEP)
 
 
-# Experiment
+def recover_previous_data(prev_csv: Path, new_csv: Path) -> pd.DataFrame:
+    '''generate `new_csv` from `prev_csv` assigning missing fields in the process. Returns the new_csv DataFrame'''
+    prev_df = pd.read_csv(prev_csv, sep=SEP)
+    columns = list(CONFIG_SPACE.keys()) + RESULT_KEYS
+    for key in columns:
+        if not key in prev_df.columns:
+            prev_df = prev_df.assign(**{key: lambda x: DEFAULT_VALUE[key]})
+
+    prev_df.to_csv(
+            new_csv, index=False, mode="x", sep=SEP,
+            columns=columns, 
+        )
+    return prev_df
+
+
+def check_existance(config: dict, df: pd.DataFrame) -> bool:
+    '''Returns True if the `config` correspond to a row of `df`'''    
+    v = df.iloc[:, 0] == df.iloc[:, 0]
+    for key, value in config.items():
+        v &= (df[key] == value)
+    return v.any()
+
+
+def is_included(row_dict: dict, config_list: list[dict]) -> bool:
+    '''Returns True if part of `row_dict` matches one full dict in `config_list`'''
+    enable = False
+    for config in config_list:
+        is_same = True
+        for k, v in config.items():
+            is_same = is_same and row_dict[k]==v
+        enable = enable or is_same
+    return enable
+
+
+# Simulations
+
+
 def run_original_experiment(csv_path):
     H = get_heisenberg_hamiltonian_12_qbits()
 
@@ -117,49 +199,53 @@ def run_simulations(
     H = get_heisenberg_hamiltonian_12_qbits()
 
     if continue_from:
-        prev_df = update_csv(continue_from/"results.csv", csv_path)
+        prev_df = recover_previous_data(continue_from/"results.csv", csv_path)
 
     config_list = generate_all_combinations(config_space)
     print(f"Running {len(config_list)} krylov subspace evaluation")
 
-    for config_dict in config_list:
+    for config in config_list:
         is_already_done = False
         if continue_from:
-            is_already_done = check_existance(config_dict, prev_df)
+            is_already_done = check_existance(config, prev_df)
         if continue_from and is_already_done:
-            print(f"Skipping already available {config_dict}")
+            print(f"Skipping already available {config}")
         else:
-            num_gates = config_dict['num_gates']
-            denom = config_dict['dt_denom']
-            treshold = config_dict['treshold']
-            strategy_circ = config_space['strategy'][config_dict['strategy']]
-            synth = config_space['synthesis'][config_dict['synthesis']]
+            num_gates = config['num_gates']
+            denom = config['dt_denom']
+            treshold = config['treshold']
+            strategy_circ = STRATEGY_MAP[config['strategy']]
+            synth = SYNTHESIS_MAP[config['synthesis']]
 
             trial_circ = lambda H,i,j: strategy_circ(H, i, j, num_gates, dt=pi/denom, synthesis=synth)
             gs_vs_d, gap = evaluate_krylov_circuit(H, trial_circ, dim=10, treshold_factor=treshold)
 
-            save_to_csv(csv_path, **config_dict, gap=gap, gs_vs_d=gs_vs_d, git=get_git_hash())
+            save_to_csv(csv_path, **config, gap=gap, gs_vs_d=gs_vs_d, git=get_git_hash())
 
 
-def update_csv(prev_csv, new_csv):
-    prev_df = pd.read_csv(prev_csv, sep='\t')
-    columns = list(CONFIG_SPACE.keys()) + RESULT_KEYS
-    for key in columns:
-        if not key in prev_df.columns:
-            prev_df = prev_df.assign(**{key: lambda x: DEFAULT_VALUE[key]})
-
-    prev_df.to_csv(
-            new_csv, index=False, mode="x", sep="\t",
-            columns=columns, 
-        )
-    return prev_df
+## Figures
 
 
-def check_existance(id_dict, df):
-    v = df.iloc[:, 0] == df.iloc[:, 0]
-    for key, value in id_dict.items():
-        v &= (df[key] == value)
-    return v.any()
+def make_figures(path, config_space=CONFIG_SPACE):
+    config_list = generate_all_combinations(config_space)
+    
+    csv_path = path/"results.csv"
+    df = pd.read_csv(csv_path, sep=SEP)
+    df_as_list_of_dict = df.to_dict(orient='records', index=config_space.keys())
+
+    for config in df_as_list_of_dict:
+        if is_included(config, config_list):
+            name = config_name(config)
+            gs_vs_d = np.asarray(eval(config['gs_vs_d']))
+            gap = config['gap']
+            if gap: 
+                name = f"{gap.real:2.3f}_{name}"
+            filename = path/f"{name}.jpg"
+            
+            if not filename.exists():
+                save_gs_vs_d_figure(gs_vs_d, filename, gap)
+            else:
+                print(f"skipping {filename}")
 
 
 def save_gs_vs_d_figure(gs_vs_d, path, gap=None):
@@ -175,46 +261,6 @@ def save_gs_vs_d_figure(gs_vs_d, path, gap=None):
     
     plt.savefig(path)
     plt.close()
-
-
-def make_figures(path, config_space=CONFIG_SPACE):
-    csv_path = path/"results.csv"
-    df = pd.read_csv(csv_path, sep="\t")
-    df_as_list_of_dict = df.to_dict(orient='records', index=config_space.keys())
-
-    config_list = generate_all_combinations(config_space)
-
-    for row_dict in df_as_list_of_dict:
-        will_plot = is_included(row_dict, config_list)
-        
-        if will_plot:
-            name = row_dict['strategy']
-            name += f"{row_dict['num_gates']}"
-            name += f"_pi{row_dict['dt_denom']}"
-            name += f"_tresh{row_dict['treshold']}"
-            
-            gs_vs_d = np.asarray(eval(row_dict['gs_vs_d']))
-            gap = row_dict['gap']
-            
-            if gap:
-                filename = path/f"{gap.real:2.3f}_{name}.jpg"
-            else:
-                filename = path/f"{name}.jpg"
-            
-            if not filename.exists() and will_plot:
-                save_gs_vs_d_figure(gs_vs_d, filename, gap)
-            else:
-                print(f"skipping {filename}")
-
-
-def is_included(row_dict, config_list):
-    will_plot = False
-    for config in config_list:
-        is_same = True
-        for k, v in config.items():
-            is_same = is_same and row_dict[k]==v
-        will_plot = will_plot or is_same
-    return will_plot
 
 
 if __name__ == "__main__":
