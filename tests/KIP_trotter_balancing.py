@@ -221,3 +221,5 @@ def evaluate_krylov_circuit(H, krylov_circuit=naive_circuit, dim=10, true_gs=-21
     return gs_vs_d, gap
 
 
+if __name__ == "__main__":
+    print_balancing_strategy(balancing_favors_high, 4, 5)

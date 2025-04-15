@@ -92,12 +92,12 @@ def generate_all_combinations(config_space: dict[list] = CONFIG_SPACE) -> list[d
 
 
 def config_name(config: dict) -> str:
-    '''returns a name based on the content of `config`'''    
-    #"_".join([k[0]+str(v) for k, v in config.items()])  # More general version
+    '''returns a name based on the content of `config`'''
     name = config['strategy']
     name += f"{config['num_gates']}"
     name += f"_pi{config['dt_denom']}"
     name += f"_tresh{config['treshold']}"
+    name += f"_synt{config['synthesis']}"
     return name
 
 # Utilities
@@ -226,7 +226,7 @@ def run_simulations(
 ## Figures
 
 
-def make_figures(path, config_space=CONFIG_SPACE):
+def make_figures(path, config_space=CONFIG_SPACE, dim=10, true_gs=-21.5496):
     config_list = generate_all_combinations(config_space)
     
     csv_path = path/"results.csv"
@@ -237,26 +237,24 @@ def make_figures(path, config_space=CONFIG_SPACE):
         if is_included(config, config_list):
             name = config_name(config)
             gs_vs_d = np.asarray(eval(config['gs_vs_d']))
-            gap = config['gap']
-            if gap: 
-                name = f"{gap.real:2.3f}_{name}"
+            gap = min(gs_vs_d[:dim]) - true_gs
+            name = f"{gap.real:2.3f}_{name}"
             filename = path/f"{name}.jpg"
             
             if not filename.exists():
-                save_gs_vs_d_figure(gs_vs_d, filename, gap)
+                save_gs_vs_d_figure(gs_vs_d[:dim], filename, true_gs)
             else:
                 print(f"skipping {filename}")
 
 
-def save_gs_vs_d_figure(gs_vs_d, path, gap=None):
+def save_gs_vs_d_figure(gs_vs_d, path, true_gs=None):
     fig, ax = plt.subplots(1,1)
     ax.set_xlabel("krylov dimension")
     ax.set_ylabel("lowest energy")
     ax.set_ylim(-22,-12)    
-    ax.plot(list(range(1,11)), gs_vs_d)
+    ax.plot(list(range(1,len(gs_vs_d)+1)), gs_vs_d)
 
-    if gap is not None:
-        true_gs = min(gs_vs_d) - gap
+    if true_gs is not None:
         ax.hlines(true_gs, 0, 10, color='k', linestyles="dotted", label="true GS")
     
     plt.savefig(path)
@@ -266,8 +264,8 @@ def save_gs_vs_d_figure(gs_vs_d, path, gap=None):
 if __name__ == "__main__":
 
     restricted_space = {
-        'num_gates': [4, 6, 8],
-        'treshold': [1e-1, 1e-4, 1e-8, 0],
+        'num_gates': [6],
+        'treshold': [1e-4, 1e-8, 0],
         'dt_denom': [20, 30, 40, 50],
         'strategy': {
             "low": switching_n_circuit,
@@ -292,7 +290,8 @@ if __name__ == "__main__":
     make_figures(
         path=rundir,
         config_space=restricted_space,
+        dim=6,
     )
 
-    shutil.copy(latest/"results.csv", latest/"results_bkp.csv")
-    shutil.copy(rundir/"results.csv", latest/"results.csv")
+    # shutil.copy(latest/"results.csv", latest/"results_bkp.csv")
+    # shutil.copy(rundir/"results.csv", latest/"results.csv")
