@@ -1,23 +1,16 @@
 # %%
-import sys
-import pathlib
-import subprocess
 from math import pi
 from numbers import Number
-from datetime import datetime
 
 import numpy as np
-import pandas as pd
 import scipy as scipy
-import matplotlib.pyplot as plt
 
 from qiskit import QuantumCircuit
 from qiskit.primitives import StatevectorEstimator
-from qiskit.synthesis import LieTrotter
+from qiskit.synthesis import LieTrotter, SuzukiTrotter
 from qiskit.circuit.library import PauliEvolutionGate
 from qiskit.quantum_info import SparsePauliOp
 
-RESULTS_DIR = pathlib.Path(__file__).parent/"trotter_balancing_results"
 
 def get_heisenberg_hamiltonian_12_qbits(J=1, n=12, ent_map=[(1,0),(2,1),(3,2),(3,4),(4,6),(5,0),(5,7),(8,7),(8,9),(10,9),(10,11),(11,6)]):
     if isinstance(J, Number):
@@ -98,32 +91,32 @@ def original_naive_circuit(H, i, j):
 
 ## Hadamard tests
 
-def general_hadamard_test_circuit(H, n_reps, m_reps, n_time, m_time):
+def general_hadamard_test_circuit(H, n_reps, m_reps, n_time, m_time, synthesis):
     qc = QuantumCircuit(18)
     qc.h(12)
     qc = prep_psi_0_with_checkpoints(qc)
-    qc.append(PauliEvolutionGate(H, n_time, synthesis=LieTrotter(reps=max(n_reps,1))), range(12))
+    qc.append(PauliEvolutionGate(H, n_time, synthesis=synthesis(reps=max(n_reps,1))), range(12))
     qc = prep_psi_0_by_0_with_checkpoints(qc)
-    qc.append(PauliEvolutionGate(H, m_time, synthesis=LieTrotter(reps=max(m_reps,1))), range(12))
+    qc.append(PauliEvolutionGate(H, m_time, synthesis=synthesis(reps=max(m_reps,1))), range(12))
     return qc
 
 
-def naive_circuit(H, i, j):
-    return general_hadamard_test_circuit(H ,j-i, i, pi*(j-i)/40, pi*i/40)
+def naive_circuit(H, i, j, synthesis=LieTrotter):
+    return general_hadamard_test_circuit(H ,j-i, i, pi*(j-i)/40, pi*i/40, synthesis)
 
 
-def fixed_n_circuit(H, i, j, N, dt):
-    return general_hadamard_test_circuit(H, N//2, N//2, (j-i)*dt, i*dt)
+def fixed_n_circuit(H, i, j, N, dt, synthesis=LieTrotter):
+    return general_hadamard_test_circuit(H, N//2, N//2, (j-i)*dt, i*dt, synthesis)
 
 
-def switching_n_circuit(H, i, j, N, dt):
+def switching_n_circuit(H, i, j, N, dt, synthesis=LieTrotter):
     n, m = balancing_favors_low(i, j, N)
-    return general_hadamard_test_circuit(H, n, m, (j-i)*dt, i*dt)
+    return general_hadamard_test_circuit(H, n, m, (j-i)*dt, i*dt, synthesis)
 
 
-def switching_n_high_circuit(H, i, j, N, dt):
+def switching_n_high_circuit(H, i, j, N, dt, synthesis=LieTrotter):
     n, m = balancing_favors_high(i, j, N)
-    return general_hadamard_test_circuit(H, n, m, (j-i)*dt, i*dt)
+    return general_hadamard_test_circuit(H, n, m, (j-i)*dt, i*dt, synthesis)
 
 
 ## Balancing strategies
@@ -181,7 +174,6 @@ def krylov_hamiltonian_and_overlap(H, krylov_circuit, dim=10):
     # measurement loop
     for j in range(dim):
         for i in range(j+1):
-            print(f"{j}/{dim}, {i}/{j+1}", end="\r")
             qc = krylov_circuit(H, i, j)
             res = estimator.run([(qc, [real_obs_H, imag_obs_H, real_obs_S, imag_obs_S])])
             h[i,j] = res.result()[0].data.evs[0] + 1j * res.result()[0].data.evs[1]
@@ -228,123 +220,4 @@ def evaluate_krylov_circuit(H, krylov_circuit=naive_circuit, dim=10, true_gs=-21
     gap = min(gs_vs_d) - true_gs if true_gs else None
     return gs_vs_d, gap
 
-
-def new_rundir():
-    date_str = datetime.today().strftime('%Y-%m-%d')
-    time_str = datetime.today().strftime('%H-%M-%S')
-    git_str = "git" + subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('ascii').strip()    
-
-    rundir = RESULTS_DIR/"-".join([date_str, time_str, git_str]) 
-    rundir.mkdir(parents=True, exist_ok=True)
-    
-    stdout_path = open(rundir/'stdout.txt', "a")
-    sys.stdout = stdout_path  # redirect print to the log file
-
-    return rundir
-
-
-def save_to_csv(path, **kwargs):
-    df = pd.DataFrame({k:[v] for k,v in kwargs.items()})
-    if path.is_file():
-        df.to_csv(path, header=None, mode="a")  
-    else: 
-        df.to_csv(path)
-
-# Experiment
-def run_original_experiment(csv_path):
-    H = get_heisenberg_hamiltonian_12_qbits()
-
-    gs_vs_d, gap = evaluate_krylov_circuit(H, original_naive_circuit)
-    save_to_csv(csv_path, strategy="original", dt_denom=40, num_gates=10, treshold=1e-8, gap=gap, gs_vs_d=gs_vs_d)
-
-    gs_vs_d, gap = evaluate_krylov_circuit(H, naive_circuit)
-    save_to_csv(csv_path, strategy="original", dt_denom=40, num_gates=10, treshold=1e-8, gap=gap, gs_vs_d=gs_vs_d)
-
-
-def run_simulation(csv_path, continue_from=None):
-    H = get_heisenberg_hamiltonian_12_qbits()
-
-    if continue_from:
-        prev_csv_path = continue_from/"results.csv"
-        prev_df = pd.read_csv(prev_csv_path)
-        if csv_path.is_file():
-            prev_df.to_csv(csv_path, header=None, mode="a")  
-        else:
-            prev_df.to_csv(csv_path)
-
-    for treshold in [1e-1, 1e-2, 1e-4, 1e-8, 1e-14]:
-        for denom in [40]:
-            for num_gates in [6]:
-                for strategy, strategy_circ in {
-                    "switch" : switching_n_circuit,
-                    "high" : switching_n_high_circuit,
-                    "fixed" : fixed_n_circuit,
-                }.items():
-                    is_already_done = False
-                    if continue_from:
-                        id_dict = dict(strategy=strategy, dt_denom=denom, num_gates=num_gates, treshold=treshold)
-                        is_already_done = check_existance(id_dict, prev_df)
-                    if continue_from and is_already_done:
-                        print(f"skipping {id_dict}")
-                    else:
-                        trial_circ = lambda H,i,j: strategy_circ(H, i, j, num_gates, dt=pi/denom)
-                        gs_vs_d, gap = evaluate_krylov_circuit(H, trial_circ, dim=10, treshold_factor=treshold)
-                        save_to_csv(csv_path, gap=gap, gs_vs_d=gs_vs_d **id_dict)
-                    
-    
-
-def check_existance(id_dict, df):
-    v = df.iloc[:, 0] == df.iloc[:, 0]
-    for key, value in id_dict.items():
-        v &= (df[key] == value)
-    return v.any()         
-
-
-def save_gs_vs_d_figure(gs_vs_d, path, gap=None):
-    
-    fig, ax = plt.subplots(1,1)
-    ax.set_xlabel("krylov dimension")
-    ax.set_ylabel("lowest energy")
-    ax.set_ylim(-22,-12)    
-    ax.plot(list(range(1,11)), gs_vs_d)
-
-    if gap is not None:
-        true_gs = min(gs_vs_d) - gap
-        ax.hlines(true_gs, 0, 10, color='k', linestyles="dotted", label="true GS")
-    
-    plt.savefig(path)
-    plt.close()
-
-
-def make_figures(path):
-    csv_path = path/"results.csv"
-    df = pd.read_csv(csv_path)
-    list_of_dict = df.to_dict(orient='records')
-
-    for d in list_of_dict:
-        strategy = d['strategy']
-        num_gates = d['num_gates']
-        denom = d['dt_denom']
-        treshold = d['treshold']
-        gs_vs_d = np.asarray(eval(d['gs_vs_d']))
-        gap = d['gap']
-
-        name = f"{strategy}{num_gates}_pi{denom}_tresh{treshold}"
-        
-        if gap:
-            file = path/f"{gap.real:2.3f}_{name}.jpg"
-        else:
-            file = path/f"{name}.jpg"
-        
-        if file.exists:
-            print(f"skipping {name}")
-        else:
-            save_gs_vs_d_figure(gs_vs_d, file, gap)
-
-
-if __name__ == "__main__":
-    LATEST = RESULTS_DIR/"latest"
-    run_simulation(new_rundir()/"results.csv", continue_from=LATEST)
-
-    # make_figures(LATEST)
 
