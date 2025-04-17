@@ -101,8 +101,8 @@ def general_hadamard_test_circuit(H, n_reps, m_reps, n_time, m_time, synthesis):
     return qc
 
 
-def naive_circuit(H, i, j, synthesis=LieTrotter):
-    return general_hadamard_test_circuit(H ,j-i, i, pi*(j-i)/40, pi*i/40, synthesis)
+def naive_circuit(H, i, j, N, dt, synthesis=LieTrotter):
+    return general_hadamard_test_circuit(H ,j-i, i, (j-i)*dt, i*dt, synthesis)
 
 
 def fixed_n_circuit(H, i, j, N, dt, synthesis=LieTrotter):
@@ -145,7 +145,7 @@ def balancing_favors_high(i, j, N, verbose=False):
         n = nn*N//(nn+mm)
         m = mm*N//(nn+mm)
     while n+m < N: 
-        if nn > mm : n += 1    ## ONLY difference from favor low is the inequality here
+        if nn > mm : n += 1  ## low uses <
         elif nn < mm : m += 1
     if verbose: print(f"{i},{j} ->   {nn},{mm} -> {n},{m}  total={n+m}")
     return n,m
@@ -220,6 +220,47 @@ def evaluate_krylov_circuit(H, krylov_circuit=naive_circuit, dim=10, true_gs=-21
     gap = min(gs_vs_d) - true_gs if true_gs else None
     return gs_vs_d, gap
 
+#%%
+# if __name__ == "__main__":
+# print_balancing_strategy(balancing_favors_high, N=8, dim=8)
+# print_balancing_strategy(balancing_favors_high, N=6, dim=8)
 
-if __name__ == "__main__":
-    print_balancing_strategy(balancing_favors_high, 4, 5)
+import matplotlib.pyplot as plt
+
+H = get_heisenberg_hamiltonian_12_qbits()
+
+n_reps = 1
+m_reps = 1
+n_time = pi/40
+m_time = pi/40
+synthesis=LieTrotter
+
+qc1 = QuantumCircuit(18, name="$|\\psi_0\\rangle$")
+qc1 = prep_psi_0_with_checkpoints(qc1)
+
+qc2 = QuantumCircuit(12, name="$U_n$")
+qc2.append(PauliEvolutionGate(H, n_time, synthesis=synthesis(reps=max(n_reps,1))), range(12))
+qc2 = qc2.decompose()
+
+qc3 = QuantumCircuit(18, name="$|\\psi_0\\rangle$")
+qc3 = prep_psi_0_by_0_with_checkpoints(qc3)
+
+qc4 = QuantumCircuit(12, name="$U_m$")
+qc4.append(PauliEvolutionGate(H, m_time, synthesis=synthesis(reps=max(m_reps,1))), range(12))
+qc4 = qc4.decompose()
+
+qc4.draw('mpl', fold=-1)
+
+# qc = QuantumCircuit(18)
+# qc.h(12)
+# qc.append(qc1, range(18))
+# qc.append(qc2, range(12))
+# qc.append(qc3, range(18))
+# qc.append(qc4, range(12))
+# qc.draw('mpl', fold=-1)
+# plt.show()
+
+# qc.draw('mpl', fold=-1)
+
+# qc.decompose(reps=0).draw('mpl', fold=-1)
+# plt.show()

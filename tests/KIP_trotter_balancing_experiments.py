@@ -62,6 +62,7 @@ STRATEGY_MAP = {
     "low": switching_n_circuit,
     "high": switching_n_high_circuit,
     "fixed": fixed_n_circuit,
+    "naive": naive_circuit,
 }
 
 SYNTHESIS_MAP = {
@@ -124,9 +125,6 @@ def new_rundir(parent: Path = RESULTS_DIR) -> Path:
     rundir = parent/"-".join([date_str, time_str, git_str]) 
     rundir.mkdir(parents=True, exist_ok=True)
     
-    stdout_path = open(rundir/'stdout.txt', "a")
-    sys.stdout = stdout_path  # redirect print to the log file
-
     return rundir
 
 
@@ -264,22 +262,28 @@ def save_gs_vs_d_figure(gs_vs_d, path, true_gs=None):
 if __name__ == "__main__":
 
     restricted_space = {
-        'num_gates': [6],
-        'treshold': [1e-4, 1e-8, 0],
-        'dt_denom': [20, 30, 40, 50],
+        'num_gates': [10],
+        'treshold': [0],
+        'dt_denom': [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80],
         'strategy': {
-            "low": switching_n_circuit,
-            "high": switching_n_high_circuit,
-            "fixed": fixed_n_circuit,
+            # "low",
+            # "high",
+            "fixed",
+            "naive",
         },
-        'synthesis': {
-            "LieTrotter": LieTrotter,
-            "SuzukiTrotter": SuzukiTrotter,
-        },
+        'synthesis': [
+            "LieTrotter", 
+            "SuzukiTrotter"
+        ],
     }
+
 
     rundir = new_rundir()
     latest = RESULTS_DIR/"latest"
+    stdout_path = open(rundir/'stdout.txt', "a")
+    sys.stdout = stdout_path  # redirect print to the log file
+
+    print(restricted_space, flush=True)
 
     run_simulations(
         csv_path=rundir/"results.csv",
@@ -290,7 +294,7 @@ if __name__ == "__main__":
     make_figures(
         path=rundir,
         config_space=restricted_space,
-        dim=6,
+        dim=10,
     )
 
     # shutil.copy(latest/"results.csv", latest/"results_bkp.csv")
