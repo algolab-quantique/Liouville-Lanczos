@@ -5,21 +5,15 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 CONFIG_SPACE = {
-        'num_gates': [4, 6, 8],
-        'treshold': [1e-1, 1e-4, 1e-8, 0],
-        'dt_denom': [20, 30, 40, 50],
-        'strategy': ["low", "high", "fixed"],
-        'synthesis': ["LieTrotter", "SuzukiTrotter"],
+        'num_gates': [10],# [4, 6, 8, 10],
+        'treshold': [0],# [1e-1, 1e-4, 1e-5, 1e-5, 1e-8, 0],
+        'dt_denom': [10, 15, 20, 25, 30, 40, 50, 80],
+        'strategy': ["fixed"], # ["low", "high", "fixed", "naive"],
+        'synthesis': ["SuzukiTrotter"],# ["LieTrotter", "SuzukiTrotter"],
 }
-
 RESULTS_DIR = Path(__file__).parent/"trotter_balancing_results"
 path = RESULTS_DIR/"latest"/"results.csv"
 df = pd.read_csv(path, sep="\t")
-
-new_df = df.copy()
-
-# for i in range(10):
-#     new_df[f'e{i}'] = df.apply(lambda x:  eval(x.gs_vs_d)[i], axis=1)
 
 def make_array(x):
     gs_vs_d = np.array(eval( x.gs_vs_d ))
@@ -40,43 +34,38 @@ def remove_both(x):
 for strategy in CONFIG_SPACE['strategy']:
     for num_gates in CONFIG_SPACE['num_gates']:
         for treshold in CONFIG_SPACE['treshold']:
+            for synthesis in CONFIG_SPACE['synthesis']:
+                
+                plt.figure(figsize=(11, 7), dpi=80)
+                plt.rc('font', size=20)
+                plt.title(f"{strategy} balancing, {num_gates} gates, $\epsilon={treshold}$")
 
-            new_df = df.copy()
-            new_df = new_df[new_df['strategy']==strategy]
-            new_df = new_df[new_df['num_gates']==num_gates]
-            new_df = new_df[new_df['treshold']==treshold]
-            new_df['gs_vs_d'] = df.apply(make_array, axis=1)
+                for i, dt_denom in enumerate(CONFIG_SPACE['dt_denom']):
+
+                    new_df = df.copy()
+                    new_df['gs_vs_d'] = df.apply(make_array, axis=1)
+                    new_df = new_df[new_df['strategy']==strategy]
+                    new_df = new_df[new_df['num_gates']==num_gates]
+                    new_df = new_df[new_df['treshold']==treshold]
+                    new_df = new_df[new_df['synthesis']==synthesis]
+                    new_df = new_df[new_df['dt_denom']==dt_denom]
 
 
-            suzuki_df = new_df[new_df['synthesis']=='SuzukiTrotter']
-            lie_df = new_df[new_df['synthesis']=='LieTrotter']
+                    for gs_v_d in new_df['gs_vs_d']:
+                        if dt_denom == 30:
+                            plt.plot(range(1, len(gs_v_d)+1), gs_v_d, label=str(dt_denom), color='red', lw=3, marker=".")
+                        else:
+                            plt.plot(range(1, len(gs_v_d)+1), gs_v_d, label=str(dt_denom), color=str(1-i/12), lw=2, marker=".")
 
-            plt.figure(figsize=(12, 9), dpi=80)
-            plt.rc('font', size=22)
-            plt.title(f"{strategy} balancing, {num_gates} gates, $\epsilon={treshold}$")
+                line0 = plt.hlines(y=-21.5496, linestyles='dashed', color='k', xmin=0, xmax=10, label="Exact")
 
-            for gs in suzuki_df[suzuki_df['dt_denom']==40]['gs_vs_d']:
-                plt.plot(gs, color=f'C3')
-            # for gs in suzuki_df[suzuki_df['dt_denom']==30]['gs_vs_d']:
-                # plt.plot(gs, color=f'C3')
-            for gs in suzuki_df[suzuki_df['dt_denom']==20]['gs_vs_d']:
-                plt.plot(gs, color=f'C1')
-            for gs in lie_df[lie_df['dt_denom']==40]['gs_vs_d']:
-                plt.plot(gs, color=f'C2')
-            # for gs in lie_df[lie_df['dt_denom']==30]['gs_vs_d']:
-                # plt.plot(gs, color=f'C2')
-            for gs in lie_df[lie_df['dt_denom']==20]['gs_vs_d']:
-                plt.plot(gs, color=f'C0')
-            line0 = plt.hlines(y=-21.5496, linestyles='dashed', color='k', xmin=0, xmax=9, label="Exact")
+                plt.ylim(-22,-17)
+                plt.xlabel("Krylov dimension")
+                plt.ylabel("$E_0$")
+                plt.legend()
+                plt.savefig(RESULTS_DIR/f"{num_gates}{strategy}{treshold}s{synthesis}.jpg")
+                plt.show()
+                plt.close()
 
-            plt.ylim(-22,-17)
-            line4 = plt.Line2D([0], [0], label='Suzuki pi/40', color='C3')
-            line3 = plt.Line2D([0], [0], label='Suzuki pi/20', color='C1')
-            line2 = plt.Line2D([0], [0], label='Lie pi/40', color='C2')
-            line1 = plt.Line2D([0], [0], label='Lie pi/20', color='C0')
-            plt.xlabel("Krylov dimension")
-            plt.ylabel("$E_0$")
-            plt.legend(handles=[line0, line1, line2, line3, line4])
-            plt.savefig(RESULTS_DIR/f"{num_gates}{strategy}{treshold}.jpg")
-            plt.close()
-
+new_df
+# %%
