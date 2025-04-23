@@ -368,6 +368,10 @@ bkd = torino.name
 #bkd = quebec.name
 #%%
 results = []
+from qiskit_ibm_runtime import EstimatorV2
+estim = EstimatorV2(torino)
+estim.run()
+
 with Session(backend=backends[bkd]) as session:
     estim_options = EstimatorOptions()
     backend = backends[session.backend()]
@@ -577,3 +581,75 @@ for gamma in gammas:
 energy = (gammas.conjugate().T @ O_ij @ gammas) / (gammas.conjugate().T @ S_ij @ gammas)
 
 # %%
+
+
+
+from qiskit.transpiler import generate_preset_pass_manager
+
+circuits = np.ndarray([10,10], dtype= QuantumCircuit)
+H_tilde = np.ndarray([10,10], dtype=complex)
+S_tilde = np.ndarray([10,10], dtype=complex)
+synth = LieTrotter(reps = 1)
+delta_t = np.pi/40
+time_evol = PauliEvolutionGate(H, delta_t, synthesis = synth)
+
+real_obs_H = SparsePauliOp('XXXXXX', 1) ^ H
+imag_obs_H = SparsePauliOp('YXXXXX', 1) ^ H
+real_obs_S = SparsePauliOp('XXXXXX', 1) ^ SparsePauliOp('I'*12, 1)
+imag_obs_S = SparsePauliOp('YXXXXX', 1) ^ SparsePauliOp('I'*12, 1)
+
+
+for j in range(10):
+    for i in range(j+1):
+        m = i
+        n = j - i
+        qc = QuantumCircuit(18)
+        qc.h(12)
+        qc = prep_psi_0_with_checkpoints(qc)
+        for t in range(n):
+            qc.append(time_evol, range(12))
+        qc = prep_psi_0_by_0_with_checkpoints(qc)
+        for t in range(m):
+            qc.append(time_evol, range(12))
+        circuits[i][j] = qc.copy()
+
+pm = generate_preset_pass_manager(backend=backend, optimization_level=3)
+circs = []
+for i in range(10):
+    circs.append([])
+    for j in range(10):
+        if circuits[i][j] is not None:
+            circs[i].append(circuits[i][j])
+        else:
+            circs[i].append(circuits[j][i])
+circs = [pm.run(circ) for circ in circs]
+
+from qiskit_ibm_runtime import EstimatorV2, Batch
+pub1=[(circ,[real_obs_H.apply_layout(circ.layout), 
+                                     imag_obs_H.apply_layout(circ.layout), 
+                                     real_obs_S.apply_layout(circ.layout), 
+                                     imag_obs_S.apply_layout(circ.layout)]) for circ_list in circs[:5] for circ in circ_list]
+pub2=[(circ,[real_obs_H.apply_layout(circ.layout), 
+                                     imag_obs_H.apply_layout(circ.layout), 
+                                     real_obs_S.apply_layout(circ.layout), 
+                                     imag_obs_S.apply_layout(circ.layout)]) for circ_list in circs[5:10] for circ in circ_list]
+
+with Batch(backend=backend) as batch:
+    estimator = EstimatorV2(mode=batch)
+    estimator.options.default_shots = 10000
+    estimator.options.resilience_level = 0
+    estimator.options.dynamical_decoupling.enable = True
+    estimator.options.dynamical_decoupling.sequence_type = 'XpXm'
+    estimator.options.resilience.zne_mitigation = True
+    estimator.options.resilience.zne.amplifier = 'pea'
+    estimator.options.twirling.enable_gates = True
+    estimator.options.twirling.num_randomizations = 32
+    estimator.options.twirling.shots_per_randomization = 350
+    estimator.options.twirling.strategy = 'active'
+    estimator.options.resilience.measure_mitigation = True
+    estimator.options.resilience.measure_noise_learning.num_randomizations = 32
+    estimator.options.resilience.measure_noise_learning.shots_per_randomization = (
+        350
+    )
+    est_job_1 = estimator.run(pub1)
+    est_job_2 = estimator.run(pub2)
