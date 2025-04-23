@@ -1,4 +1,7 @@
+
 # %%
+import sys
+sys.path.append('..')
 from qiskit.quantum_info import SparsePauliOp, Operator
 from qiskit import QuantumCircuit
 from qiskit.circuit.library import EfficientSU2, PauliEvolutionGate  # TwoLocal, ZZFeatureMap, etc
@@ -19,8 +22,10 @@ from LiouvilleLanczos.Quantum_computer.VQE_stuff.ansatz import ControllableHEA, 
 
  #%%
 backend = FakeQuebec()
+service = QiskitRuntimeService()
 target = backend.target
-cm = target.build_coupling_map()
+#cm = target.build_coupling_map()
+cm = backend.coupling_map
 deg3_qubits = [
     idx for idx, row in enumerate(cm.distance_matrix) if list(row).count(1) == 3
 ]
