@@ -264,16 +264,16 @@ if __name__ == "__main__":
     restricted_space = {
         'num_gates': [10],
         'treshold': [0],
-        'dt_denom': [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80],
+        'dt_denom': [40],
         'strategy': {
             # "low",
             # "high",
-            "fixed",
+            # "fixed",
             "naive",
         },
         'synthesis': [
             "LieTrotter", 
-            "SuzukiTrotter"
+            # "SuzukiTrotter"
         ],
     }
 
@@ -287,7 +287,7 @@ if __name__ == "__main__":
 
     run_simulations(
         csv_path=rundir/"results.csv",
-        continue_from=latest,
+        # continue_from=latest,
         config_space=restricted_space,
     )
 

@@ -75,11 +75,11 @@ def prep_psi_0_by_0_with_checkpoints(qc: QuantumCircuit):
 
 
 def original_naive_circuit(H, i, j):
-    time_evol = PauliEvolutionGate(H, pi/40, synthesis=LieTrotter(reps = 1))
-    qc = QuantumCircuit(18)
     m = i
     n = j - i    
+    qc = QuantumCircuit(18)
     qc.h(12)
+    time_evol = PauliEvolutionGate(H, pi/40, synthesis=LieTrotter(reps = 1))
     qc = prep_psi_0_with_checkpoints(qc)
     for t in range(n):
         qc.append(time_evol, range(12))
@@ -213,7 +213,7 @@ def evaluate_krylov_circuit(H, krylov_circuit=naive_circuit, dim=10, true_gs=-21
         solve_generalized_eigenvalue(
             H_tilde[0:d,0:d], 
             S_tilde[0:d,0:d], 
-            threshold=treshold_factor*d
+            threshold=treshold_factor * d
         )[0].real
         for d in range(1, dim+1)
     ]
@@ -221,46 +221,47 @@ def evaluate_krylov_circuit(H, krylov_circuit=naive_circuit, dim=10, true_gs=-21
     return gs_vs_d, gap
 
 #%%
-# if __name__ == "__main__":
-# print_balancing_strategy(balancing_favors_high, N=8, dim=8)
-# print_balancing_strategy(balancing_favors_high, N=6, dim=8)
+if __name__ == "__main__":
+    # print_balancing_strategy(balancing_favors_high, N=8, dim=8)
+    print_balancing_strategy(balancing_favors_high, N=4, dim=4)
 
-import matplotlib.pyplot as plt
+    import matplotlib.pyplot as plt
 
-H = get_heisenberg_hamiltonian_12_qbits()
+    H = get_heisenberg_hamiltonian_12_qbits()
 
-n_reps = 1
-m_reps = 1
-n_time = pi/40
-m_time = pi/40
-synthesis=LieTrotter
+    n_reps = 1
+    m_reps = 1
+    n_time = pi/40
+    m_time = pi/40
+    synthesis=LieTrotter
 
-qc1 = QuantumCircuit(18, name="$|\\psi_0\\rangle$")
-qc1 = prep_psi_0_with_checkpoints(qc1)
+    qc1 = QuantumCircuit(18, name="$|\\psi_0\\rangle$")
+    qc1 = prep_psi_0_with_checkpoints(qc1)
 
-qc2 = QuantumCircuit(12, name="$U_n$")
-qc2.append(PauliEvolutionGate(H, n_time, synthesis=synthesis(reps=max(n_reps,1))), range(12))
-qc2 = qc2.decompose()
+    qc2 = QuantumCircuit(12, name="$U_n$")
+    qc2.append(PauliEvolutionGate(H, n_time, synthesis=synthesis(reps=max(n_reps,1))), range(12))
+    qc2 = qc2.decompose()
 
-qc3 = QuantumCircuit(18, name="$|\\psi_0\\rangle$")
-qc3 = prep_psi_0_by_0_with_checkpoints(qc3)
+    qc3 = QuantumCircuit(18, name="$|\\psi_0\\rangle$")
+    qc3 = prep_psi_0_by_0_with_checkpoints(qc3)
 
-qc4 = QuantumCircuit(12, name="$U_m$")
-qc4.append(PauliEvolutionGate(H, m_time, synthesis=synthesis(reps=max(m_reps,1))), range(12))
-qc4 = qc4.decompose()
+    qc4 = QuantumCircuit(12, name="$U_m$")
+    qc4.append(PauliEvolutionGate(H, m_time, synthesis=synthesis(reps=max(m_reps,1))), range(12))
+    qc4 = qc4.decompose()
 
-qc4.draw('mpl', fold=-1)
+    # qc4.draw('mpl', fold=-1)
 
-# qc = QuantumCircuit(18)
-# qc.h(12)
-# qc.append(qc1, range(18))
-# qc.append(qc2, range(12))
-# qc.append(qc3, range(18))
-# qc.append(qc4, range(12))
-# qc.draw('mpl', fold=-1)
-# plt.show()
+    qc = QuantumCircuit(18)
+    qc.h(12)
+    qc.append(qc1, range(18))
+    qc.append(qc2, range(12))
+    qc.append(qc3, range(18))
+    qc.append(qc4, range(12))
+    qc.draw('mpl', fold=-1)
+    plt.show()
 
-# qc.draw('mpl', fold=-1)
+    # qc.draw('mpl', fold=-1)
 
-# qc.decompose(reps=0).draw('mpl', fold=-1)
-# plt.show()
+    qc.decompose(reps=0).draw('mpl', fold=-1)
+    plt.show()
+
