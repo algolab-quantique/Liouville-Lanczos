@@ -1,4 +1,3 @@
-
 # %%
 import sys
 sys.path.append('..')
@@ -22,7 +21,6 @@ from LiouvilleLanczos.Quantum_computer.VQE_stuff.ansatz import ControllableHEA, 
 
  #%%
 backend = FakeQuebec()
-service = QiskitRuntimeService()
 target = backend.target
 #cm = target.build_coupling_map()
 cm = backend.coupling_map
@@ -110,14 +108,15 @@ def prep_psi_0_by_0_with_checkpoints(qc: QuantumCircuit):
 
 #%%
 #basis state has energy -12
-estim = StatevectorEstimator()
-D = 12
+from qiskit_aer.primitives import EstimatorV2 as mps_estimator
+estim = mps_estimator(options={"backend_options": {"method":"matrix_product_state"}})
+D = 10
 circuits = np.ndarray([D,D], dtype= QuantumCircuit)
 H_tilde = np.ndarray([D,D], dtype=complex)
 S_tilde = np.ndarray([D,D], dtype=complex)
 synth = LieTrotter(reps = 2)
 delta_t = np.pi/40
-#time_evol = PauliEvolutionGate(H, delta_t, synthesis = synth)
+time_evol = PauliEvolutionGate(H, delta_t, synthesis = synth)
 
 real_obs_H = SparsePauliOp('XXXXXX', 1) ^ H
 imag_obs_H = SparsePauliOp('YXXXXX', 1) ^ H
@@ -140,11 +139,11 @@ for j in range(D):
 for i in range(D):
     for j in range(D):
         if circuits[i][j] is not None:
-            res = estim.run([(circuits[i][j], [real_obs_H, imag_obs_H, real_obs_S, imag_obs_S])])
+            res = estim.run([(circuits[i][j].decompose(), [real_obs_H, imag_obs_H, real_obs_S, imag_obs_S])])
             H_tilde[i,j] = res.result()[0].data.evs[0] + 1j * res.result()[0].data.evs[1]
             S_tilde[i,j] = res.result()[0].data.evs[2] + 1j * res.result()[0].data.evs[3]
         else:
-            res = estim.run([(circuits[j][i], [real_obs_H, imag_obs_H, real_obs_S, imag_obs_S])])
+            res = estim.run([(circuits[j][i].decompose(), [real_obs_H, imag_obs_H, real_obs_S, imag_obs_S])])
             H_tilde[i,j] = res.result()[0].data.evs[0] - 1j * res.result()[0].data.evs[1]
             S_tilde[i,j] = res.result()[0].data.evs[2] - 1j * res.result()[0].data.evs[3]
 #%%
@@ -185,35 +184,46 @@ def E_vs_D(H_tilde, S_tilde, threshold_slope):
         GSEs.append(eigvals[-1])
         ground_states.append(eigvecs[:,-1])
     return GSEs, ground_states, V_eps
-GSEs, vecs, V_eps = E_vs_D(H_tilde, S_tilde, 1e-8)
+GSEs, vecs, V_eps = E_vs_D(H_tilde, S_tilde, 0)
+c = vecs[-1]
+gammas = V_eps @ c
 plt.plot(GSEs)
 plt.title('Ground state energy vs Krylov dimension for fixed ')
 
 #%%
 from LiouvilleLanczos.Quantum_computer.QC_lanczos import krylov_inner_product_spo, Liouvillian_spo, sum_spo
+from LiouvilleLanczos.Lanczos_components import QKB_geometry
+def make_circuit_1(i, j, H, delta_t):
+    m = i
+    n = j - i
+    qc = QuantumCircuit(18)
+    qc.h(12)
+    qc = prep_psi_0_with_checkpoints(qc)
+    qc.append(PauliEvolutionGate(H, n*delta_t, synthesis=synth), range(12))  
+    qc = prep_psi_0_by_0_with_checkpoints(qc)
+    qc.append(PauliEvolutionGate(H, m*delta_t, synthesis=synth), range(12))          
+    return qc.decompose()
 
+class QKB_1Loop(QKB_geometry):
+    def __init__(self, H, delta_t, D, gammas, S):
+        self.system_pos = [i for i in range(12)]
+        self.ancillas_pos = [i for i in range(12, 18)]
+        self.num_qubits = 18
+        self.H = H
+        self.delta_t = delta_t
+        self.D = D
+        self.gammas = gammas
+        self.S = S
+    def make_circuit(self, i: int, j: int):
+        return make_circuit_1(i, j, self.H, self.delta_t)
 
-#Now that we have Krylov basis decomposition, want to calculate Green's function
-#Need to generate a list of observables for which to evaluate <psi_i|A|psi_j> on the QC
-#The krylov basis amplitudes of the GS are given by the elements of "vecs"
-#we will add entanglement checkpoints across the chip to make the preparation controlled on 0 easier.
-#%%
-psi_prep_0 = QuantumCircuit(18)
-psi_prep_0.h(12)
-psi_prep_0 = prep_psi_0_with_checkpoints(psi_prep_0)
-
-psi_prep_0_on_0 = QuantumCircuit(18)
-psi_prep_0_on_0 = prep_psi_0_by_0_with_checkpoints(psi_prep_0_on_0)
-estimator = StatevectorEstimator()
-
-c = vecs[-1]
-gammas = V_eps @ c
-
-kip = krylov_inner_product_spo(psi_prep_0, psi_prep_0_on_0, estimator, gammas, S_tilde, H, 1e-6, delta_t, D, 6)
 A = H
-B = SparsePauliOp('I'*12, 1/2)
-c = kip(A,B)
-#it works!
+B = SparsePauliOp('I' * 12, 1/2)
+qkb = QKB_1Loop(H, np.pi/40, 10, gammas, S_tilde)
+kip = krylov_inner_product_spo(qkb, estim, 1e-6)
+a = kip(A,B)
+#get back krylov GSE estimation, as expected
+#Now that we have Krylov basis decomposition, want to calculate Green's function
 # %%
 #Now, let's use this to calculate the Green's function. Let's simulate it first
 from LiouvilleLanczos.Lanczos import Lanczos
@@ -221,6 +231,15 @@ from LiouvilleLanczos.matrix_impl import MatrixState_inner_product,Matrix_Liouvi
 from LiouvilleLanczos.Green import CF_Green
 from qiskit.quantum_info import Statevector, random_unitary
 
+w = np.linspace(-5.5,5.5,1000)-1e-1j
+eps = 1e-6
+SQ_inpro = kip
+SQ_Liou = Liouvillian_spo(eps)
+lanczos = Lanczos(SQ_inpro,SQ_Liou,sum_spo(eps))
+a_sim5,b_sim5,mu_sim5 = lanczos.polynomial_hybrid(H,A,B,3,5e-3)
+green_sim = CF_Green(a_sim5,b_sim5)
+plt.plot(w,np.imag(green_sim(w)))
+#%%
 Hmat = H.to_matrix()
 #generate ground state vectors
 psi_mat = np.zeros(2**12, dtype = complex)
@@ -231,27 +250,15 @@ psi_mat += gammas[0] * np.array(Statevector(qc))
 for i in range(9):
     qc.append(time_evol, range(12))
     psi_mat += gammas[i+1] * np.array(Statevector(qc))
-print(np.linalg.norm(psi_mat))
 #%%
 matrix_lanczos = Lanczos(MatrixState_inner_product(psi_mat),Matrix_Liouvillian(),Matrix_sum())
 A = SparsePauliOp('I'*11 + 'Z', 1)
 A_mat = A.to_matrix()
 B = SparsePauliOp('Z' + 'I' * 11, 1)
 B_mat = B.to_matrix()
-a_ed,b_ed,mu_ed = matrix_lanczos.polynomial_hybrid(Hmat,A_mat,[B_mat],10)
+a_ed,b_ed,mu_ed = matrix_lanczos.polynomial_hybrid(Hmat,A_mat,[B_mat],3)
 green_ed = CF_Green(a_ed,b_ed)
-w = np.linspace(-5.5,5.5,1000)-1e-1j
 plt.plot(w,np.imag(green_ed(w)))
-# %%
-#Now, run the QC simulation
-eps = 1e-6
-SQ_inpro = kip
-SQ_Liou = Liouvillian_spo(eps)
-lanczos = Lanczos(SQ_inpro,SQ_Liou,sum_spo(eps))
-a_sim5,b_sim5,mu_sim5 = lanczos.polynomial_hybrid(H,A,B,10,5e-3)
-green_sim = CF_Green(a_sim5,b_sim5)
-plt.plot(w,np.imag(green_sim(w)))
-#save figure
 # %%
 #New Geometry
 #make for marrakesh for now
@@ -314,7 +321,6 @@ def prep_psi_0_by_0_with_checkpoints_2_loops(qc: QuantumCircuit):
     qc.cx(24,4, ctrl_state='0')
     qc.cx(24,15, ctrl_state='0')
     return qc
-#%%
 # %%
 #generate Hamiltonian for big loop geometry:
 ent_map = []
@@ -339,95 +345,69 @@ ent_map_sim = [(remap[ent_map[i][0]], remap[ent_map[i][1]]) for i in range(len(e
 H_sim = Heisenberg(1, 20, ent_map_sim)
 #%%
 #TEST INITIAL STATE ENERGY
-estim = StatevectorEstimator()
+from qiskit_aer.primitives import EstimatorV2 as mps_estimator
+estim = mps_estimator(options={"backend_options": {"method":"matrix_product_state"}})
 qc = QuantumCircuit(20)
 for qb in [0, 2, 4, 6, 8, 11, 13, 15, 17, 19]:
     qc.x(qb)
 res = estim.run([(qc, H_sim)])
 print(res.result()[0].data.evs) #energy is -20
+#test krylov method
+#%%
+def make_circuit_2(i: int, j: int, H, delta_t):
+    qc = QuantumCircuit(21)
+    qc.h(20)
+    for target in [4, 15]:
+        qc.cx(20, target)
+    m = i
+    n = j - i
+    time_evol = PauliEvolutionGate(H, delta_t, synthesis = LieTrotter(reps = 1))
+    for t in range(n):
+        qc.append(time_evol, range(20))
+    for target in [4, 15]:
+        qc.cx(20, target, ctrl_state='0')
+    for t in range(m):
+        qc.append(time_evol, range(20))
+    return qc
+
+real_obs_H = SparsePauliOp('X', 1) ^ H_sim
+imag_obs_H = SparsePauliOp('Y', 1) ^ H_sim
+real_obs_S = SparsePauliOp('X', 1) ^ SparsePauliOp('I' * 20)
+imag_obs_S = SparsePauliOp('Y', 1) ^ SparsePauliOp('I' * 20)
+#%%
+D = 10
+H_tilde = np.zeros([D,D], dtype = complex)
+S_tilde = np.zeros([D,D], dtype = complex)
+for i in range(D):
+    for j in range(i+1):
+        qc = make_circuit_2(i, j, H_sim, np.pi/40)
+        res = estim.run([(qc.decompose(), [real_obs_H, imag_obs_H, real_obs_S, imag_obs_S])])
+        H_tilde[i,j] = res.result()[0].data.evs[0] + 1j * res.result()[0].data.evs[1]
+        S_tilde[i,j] = res.result()[0].data.evs[2] + 1j * res.result()[0].data.evs[3]
+        H_tilde[j,i] = res.result()[0].data.evs[0] - 1j * res.result()[0].data.evs[1]
+        S_tilde[j,i] = res.result()[0].data.evs[2] - 1j * res.result()[0].data.evs[3]
+
 # %%
-#test controlled circuit architecture
-qc_sim = QuantumCircuit(29)
-qc_sim.h(24)
-qc_sim = prep_psi_0_with_checkpoints_2_loops(qc_sim)
-qc_sim = prep_psi_0_by_0_with_checkpoints_2_loops(qc_sim)
-real_obs_H = SparsePauliOp('XXXXXXXXX', 1) ^ H_sim
-imag_obs_H = SparsePauliOp('YXXXXXXXX', 1) ^ H_sim
-real_obs_S = SparsePauliOp('XXXXXXXXX', 1) ^ SparsePauliOp('I'*20, 1)
-imag_obs_S = SparsePauliOp('YXXXXXXXX', 1) ^ SparsePauliOp('I'*20, 1)
+GSEs, vecs, V_eps = E_vs_D(H_tilde, S_tilde, 0)
+plt.plot(GSEs)
+plt.title('Ground state energy vs Krylov dimension for fixed ')
 #%%
-res = estim.run([(qc_sim, [real_obs_H, imag_obs_H])])
-#works, very slow
-# %%
-circuits_sim = np.ndarray([5,5], dtype= QuantumCircuit)
-H_tilde = np.ndarray([5,5], dtype=complex)
-S_tilde = np.ndarray([5,5], dtype=complex)
-time_evol = PauliEvolutionGate(H_sim, delta_t, synthesis = synth)
-for j in range(5):
-    for i in range(j+1):
-        m = i
-        n = j - i
-        qc = QuantumCircuit(29)
-        qc.h(24)
-        qc = prep_psi_0_with_checkpoints_2_loops(qc)
-        for t in range(n):
-            qc.append(time_evol, range(20))
-        qc = prep_psi_0_by_0_with_checkpoints(qc)
-        for t in range(m):
-            qc.append(time_evol, range(20))
-        circuits_sim[i][j] = qc.copy()
-#%%
-print(circuits_sim[0,0].depth(lambda x: len(x.qubits) >=2))
-circuits_sim[0,0].num_nonlocal_gates()
-#%%
-from qiskit_ibm_runtime import (
-    Session,
-    Sampler,
-    QiskitRuntimeService,
-    Options,
-    Estimator,
-    EstimatorV2
-)
-from qiskit_ibm_runtime.options import (
-    EnvironmentOptions,
-    EstimatorOptions
-)
-from qiskit.primitives import PrimitiveJob
-service_algolab = QiskitRuntimeService(
-    channel="ibm_quantum",
-    instance = 'ibm-q-qida/iq-quantum/algolab'
-)
-torino = service_algolab.backend('ibm_torino')
-backends = {'ibm_torino': torino}
-bkd = torino.name
-#%%
-jobs = np.ndarray([5,5], dtype = PrimitiveJob)
-with Session(backend=backends[bkd]) as session:
-    estim_options = EstimatorOptions()
-    backend = backends[session.backend()]
-    estim_options.resilience_level = 2
-    estim_options.default_shots=5000 #shot noise 10000 -> ~0.01, 100000 -> ~0.003
-    estim_options.environment.job_tags = []
-    #try PEA instead of gate folding
-    estim_options.dynamical_decoupling.enable = True
-    #DD may not help
-    estim_options.dynamical_decoupling.sequence_type = 'XY4'
-    estim = EstimatorV2(mode = session ,options=estim_options)
-    pm = generate_preset_pass_manager(backend=backend, optimization_level=3)
-    for i in range(5):
-        for j in range(5):
-            if circuits[i][j] is not None:
-                circ = pm.run(circuits[i,j])
-                res = estim.run([(circ, [real_obs_H.apply_layout(circ.layout), imag_obs_H.apply_layout(circ.layout), real_obs_S.apply_layout(circ.layout), imag_obs_S.apply_layout(circ.layout)])])
-                jobs[i,j] = res
-                H_tilde[i,j] = res.result()[0].data.evs[0] + 1j * res.result()[0].data.evs[1]
-                S_tilde[i,j] = res.result()[0].data.evs[2] + 1j * res.result()[0].data.evs[3]
-            else:
-                res = jobs[j,i]
-                H_tilde[i,j] = res.result()[0].data.evs[0] - 1j * res.result()[0].data.evs[1]
-                S_tilde[i,j] = res.result()[0].data.evs[2] - 1j * res.result()[0].data.evs[3]
-# %%
-import datetime
-yesterday = datetime.datetime.now() - datetime.timedelta(days = 2)
-jobs = service_algolab.jobs(created_after=yesterday)
+#TEST new GFN protocol
+from LiouvilleLanczos.Lanczos_components import QKB_geometry
+from LiouvilleLanczos.Quantum_computer import krylov_inner_product_spo
+from functools import partial
+class QKB_2_loops(QKB_geometry):
+    def __init__(self, H, delta_t, D, gammas, S):
+        self.system_pos = [i for i in range(20)]
+        self.ancillas_pos = [20]
+        self.num_qubits = 20
+        self.H = H
+        self.delta_t = delta_t
+        self.D = D
+        self.gammas = gammas
+        self.S = S
+    def make_circuit(self, i: int, j: int):
+        return make_circuit_2(i, j, self.H, self.delta_t)
+
+qkb = QKB_2_loops(H_sim)
 # %%
