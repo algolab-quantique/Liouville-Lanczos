@@ -73,12 +73,3 @@ class Summation(ABC):
         resulting vector.
         """
         ...
-class QKB_geometry(ABC):
-    """
-    Interface class for a Quantum Basis geometry object
-    The make_circuit method must prepare a quantum circuit which can be measured
-    to obtain projection element <phi_i|O|phi_j> given an observable O
-    """
-    @abstractmethod
-    def make_circuit(self, i: int, j: int):
-        ...

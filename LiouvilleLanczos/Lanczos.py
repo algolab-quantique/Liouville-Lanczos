@@ -119,6 +119,7 @@ class Lanczos():
         a = [a_i]
         f_i,f_im = f_ip,f_i
         for i in range(1,max_k):
+            print(f'currently at iteration {i}')
             if b_ip < min_b:
                 return a,b,multimoments
             multimoments.append([self.inner_prod(o,f_i,real_result=False,Name=f"m{m}_{i}") for m,o in enumerate(other_vectors)]) #**not** always real
@@ -136,7 +137,7 @@ class Lanczos():
             f_ip = self.sum(f_ip,- a_i*f_i,- b[-1]*f_im)
             try:
                 b2 = self.inner_prod(f_ip,f_ip,real_result=True,Name=f"b^2_{i+1}") #Always real
-                assert b2>self.epsilon , f"b^2={b2} is smaller than {self.epsilon}, terminating"
+                assert np.real(b2)>self.epsilon , f"b^2={b2} is smaller than {self.epsilon}, terminating"
                 b_ip = np.sqrt(b2)
             except Exception as e:
                 print(f"anomalous termination b at iteration {i}")
