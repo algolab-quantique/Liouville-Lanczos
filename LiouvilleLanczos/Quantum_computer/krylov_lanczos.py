@@ -1,6 +1,6 @@
 #%%
 from qkip.layout import QubitsLayout
-from qkip.krylov import KrylovBasis, HeisenbergQKD
+from qkip.krylov import KrylovBasis, HeisenbergQKD, SimulationShadows
 from qiskit.quantum_info import SparsePauliOp
 from qiskit.primitives import BaseEstimatorV2
 from LiouvilleLanczos.Quantum_computer.QC_lanczos import relative_simplify_spo, separate_imag
@@ -30,4 +30,24 @@ class krylov_inner_product_spo(Base_inner_product):
         if(not real_result):
             return ans + 1j * self.qkd.estimate_on_gs(O_img, self.estimator)
         
+        return ans
+
+class krylov_shadow_inner_product_spo(Base_inner_product):
+    def __init__(self,
+            shadow: SimulationShadows,
+            epsilon: int,
+    ):
+        self.shadow = shadow
+        self.eps = epsilon
+    def __call__(self, A: SparsePauliOp, B: SparsePauliOp, real_result: bool=False, Name: Optional[str]=None):
+        #do nothing with name for now
+        Bc = B.adjoint()
+        f = A@Bc+Bc@A
+        f = relative_simplify_spo(f,self.eps)
+        paulilist = f.paulis
+        coeffs = f.coeffs
+        _, pauli_expvals = self.shadow.krylov_expval(paulilist)
+        ans = np.dot(coeffs,pauli_expvals)
+        if real_result:
+            return np.real(ans)
         return ans
