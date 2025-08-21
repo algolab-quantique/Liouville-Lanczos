@@ -394,7 +394,7 @@ plt.title('Ground state energy vs Krylov dimension for fixed ')
 #%%
 #TEST new GFN protocol
 from LiouvilleLanczos.Lanczos_components import QKB_geometry
-from LiouvilleLanczos.Quantum_computer import krylov_inner_product_spo
+from LiouvilleLanczos.Quantum_computer.QC_lanczos import krylov_inner_product_spo
 from functools import partial
 class QKB_2_loops(QKB_geometry):
     def __init__(self, H, delta_t, D, gammas, S):
