@@ -80,6 +80,7 @@ class MatrixState_inner_product(Inner_product):
         initialize the inner product with the state.
         """
         self.state =state
+        self.obs = {}
     def __call__(self, A,B,*args,**kwargs) -> float:
         """
         compute the inner product between A and B.
@@ -91,4 +92,12 @@ class MatrixState_inner_product(Inner_product):
         sb = Bd@self.state
         sb = A@sb
         stated = np.conj(self.state)
-        return stated@(sa+sb)
+        out = stated@(sa+sb)
+        
+        if kwargs['Name'] is not None:
+            abm, iteration = kwargs['Name'].split('_')
+            if abm not in self.obs: self.obs[abm]=[]
+            self.obs[abm].append(sa+sb)
+            print(f'    {abm} {iteration}', end='\n')
+
+        return out

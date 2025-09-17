@@ -36,6 +36,7 @@ import numpy as np
 from typing import Optional
 
 from qiskit.transpiler import PassManager
+from qiskit_ibm_runtime import RuntimeJobFailureError
 
 from pauliarray import WeightedPauliArray, PauliArray, Operator
 from pauliarray.partition.commutating_paulis.exclusive_fct import (  # partition_same_z,
@@ -114,6 +115,7 @@ class inner_product_spo(Base_inner_product):
         self.state = state
         self.estimator = estimator
         self.eps = epsilon
+        self.obs = {}
         
     def __call__(self,A:SparsePauliOp,B:SparsePauliOp,real_result:bool=False,Name:Optional[str]=None):
         """
@@ -127,29 +129,46 @@ class inner_product_spo(Base_inner_product):
         obs_real, obs_imag = separate_imag(f)
         # print(f"A={A}\nB={B}\nf={f}")
         #imaginary contribution are necessarily error.
-        try: #Add name to the list of tag for this job.
-            if Name is not None:
-                tags = self.estimator.options.environment.job_tags
-                tags.append(Name)
-                self.estimator.options.update(job_tags = tags)
-        except:
-            ...
-        isa_obs_real = obs_real.apply_layout(self.state.layout)
-        out = np.real(self.estimator.run([(self.state,isa_obs_real)]).result()[0].data.evs)
-        out = complex(out)
-        if not real_result:
+        if Name is not None:
+            abm, iteration = Name.split('_')
+            if iteration == '0':
+                if abm not in self.obs: 
+                    self.obs[abm]=[]
+                else:
+                    self.obs['_'+abm] = self.obs[abm]
+                    self.obs[abm] = [] 
+            self.obs[abm].append(obs_real+1j*obs_imag)
+            print(f'    {abm} {iteration}', end='\n')
+        
+        out = complex(0)
+        if any(obs_real.coeffs>=self.eps):
+            isa_obs_real = obs_real.apply_layout(self.state.layout)
+            try:
+                out += np.real(self.estimator.run([(self.state, isa_obs_real)]).result()[0].data.evs)
+            except RuntimeJobFailureError as e:
+                dump_qpu_error((self.state, isa_obs_real), e, note="real")
+
+        if not real_result and any(obs_imag.coeffs>=self.eps):
+            # print(f"  imag: {len(obs_imag)}")
             isa_obs_imag = obs_imag.apply_layout(self.state.layout)
-            out_imag = np.real(self.estimator.run([(self.state,isa_obs_imag)]).result()[0].data.evs)
+            try:
+                out_imag = np.real(self.estimator.run([(self.state,isa_obs_imag)]).result()[0].data.evs)
+            except RuntimeJobFailureError as e:
+                dump_qpu_error((self.state, isa_obs_imag), e, note="imag")
+                
             out += out_imag * 1j
 
-        try: #remove the name from the list of tags of the upcoming jobs
-            if Name is not None:
-                tags = self.estimator.options.environment.job_tags
-                tags = tags[:-1] # removes the appended name.
-                self.estimator.options.update(job_tags = tags)
-        except:
-            ...
         return out
+
+
+def dump_qpu_error(pub, e, note=""):
+    print(note)
+    import matplotlib.pyplot as plt
+    print(pub)
+    pub[0].draw('mpl', fold=-1)
+    plt.savefig("problematic_circuit.pdf")
+    raise e
+
 
 class smart_inner_product_spo(Base_inner_product):
     def __init__(self, state: QuantumCircuit, sampler: BaseSamplerV2, epsilon: int, exp_dict = {}):

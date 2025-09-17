@@ -105,21 +105,22 @@ class Lanczos():
         Liouville-Lanczos' Green submodule contains the facilities to compute 
         the Fourrier transform of those response function.
         """
+        print("Lanczos recursion starting")
         i=0
-        b = [np.sqrt(self.inner_prod(f_0,f_0,real_result=True,Name="b0"))]
+        b = [np.sqrt(self.inner_prod(f_0,f_0,real_result=True,Name="b_0"))]
         f_i = f_0/b[-1]
         multimoments = [[self.inner_prod(o,f_i,real_result=False,Name=f"m{m}_{0}") for m,o in enumerate(other_vectors)] ]
         f_ip = self.Liouvillian(-H,f_i)
-        a_i = self.inner_prod(f_ip,f_i,real_result=True,Name="a0")
+        a_i = self.inner_prod(f_ip,f_i,real_result=True,Name="a_0")
         if self.logger:
             self.logger(i,f_i,a_i,b[-1])
         f_ip = self.sum(f_ip, - a_i*f_i)
-        b_ip = np.sqrt(self.inner_prod(f_ip,f_ip,real_result=True,Name="b1"))
+        b_ip = np.sqrt(self.inner_prod(f_ip,f_ip,real_result=True,Name="b_1"))
         f_ip = f_ip / b_ip
         a = [a_i]
         f_i,f_im = f_ip,f_i
         for i in range(1,max_k):
-            print(f'currently at iteration {i}')
+            print(f'  iteration {i}', end="\n")
             if b_ip < min_b:
                 return a,b,multimoments
             multimoments.append([self.inner_prod(o,f_i,real_result=False,Name=f"m{m}_{i}") for m,o in enumerate(other_vectors)]) #**not** always real
@@ -128,7 +129,7 @@ class Lanczos():
                 a_i = self.inner_prod(f_ip,f_i,real_result=True,Name=f"a_{i}") #always real
                 a.append(a_i)
             except Exception as e:
-                print(f"anomalous termination a at iteration {i}")
+                print(f"early termination a at iteration {i}")
                 print(e)
                 return a,b,multimoments
             b.append(b_ip)
@@ -136,11 +137,11 @@ class Lanczos():
                 self.logger(i,f_i,a[-1],b[-1])
             f_ip = self.sum(f_ip,- a_i*f_i,- b[-1]*f_im)
             try:
-                b2 = self.inner_prod(f_ip,f_ip,real_result=True,Name=f"b^2_{i+1}") #Always real
+                b2 = self.inner_prod(f_ip,f_ip,real_result=True,Name=f"b_{i+1}") #Always real
                 assert np.real(b2)>self.epsilon , f"b^2={b2} is smaller than {self.epsilon}, terminating"
                 b_ip = np.sqrt(b2)
             except Exception as e:
-                print(f"anomalous termination b at iteration {i}")
+                print(f"early termination b at iteration {i}")
                 print(e)
                 return a,b,multimoments
             f_ip = f_ip / b_ip
