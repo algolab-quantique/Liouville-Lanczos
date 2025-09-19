@@ -127,8 +127,7 @@ class inner_product_spo(Base_inner_product):
         f = A@Bc+Bc@A
         f = relative_simplify_spo(f,self.eps)
         obs_real, obs_imag = separate_imag(f)
-        # print(f"A={A}\nB={B}\nf={f}")
-        #imaginary contribution are necessarily error.
+
         if Name is not None:
             abm, iteration = Name.split('_')
             if iteration == '0':
@@ -141,15 +140,14 @@ class inner_product_spo(Base_inner_product):
             print(f'    {abm} {iteration}', end='\n')
         
         out = complex(0)
-        if any(obs_real.coeffs>=self.eps):
+        if any(np.abs(obs_real.coeffs)>=self.eps):
             isa_obs_real = obs_real.apply_layout(self.state.layout)
             try:
                 out += np.real(self.estimator.run([(self.state, isa_obs_real)]).result()[0].data.evs)
             except RuntimeJobFailureError as e:
                 dump_qpu_error((self.state, isa_obs_real), e, note="real")
 
-        if not real_result and any(obs_imag.coeffs>=self.eps):
-            # print(f"  imag: {len(obs_imag)}")
+        if not real_result and any(np.abs(obs_imag.coeffs)>=self.eps):
             isa_obs_imag = obs_imag.apply_layout(self.state.layout)
             try:
                 out_imag = np.real(self.estimator.run([(self.state,isa_obs_imag)]).result()[0].data.evs)
@@ -159,7 +157,7 @@ class inner_product_spo(Base_inner_product):
             out += out_imag * 1j
 
         return out
-
+        
 
 def dump_qpu_error(pub, e, note=""):
     print(note)
