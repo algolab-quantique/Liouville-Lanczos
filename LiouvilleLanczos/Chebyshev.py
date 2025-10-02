@@ -17,7 +17,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 import numpy as np
-from Lanczos_components import Inner_product,Liouvillian,Summation
+from .Lanczos_components import Inner_product,Liouvillian,Summation
 
 
 class triple_product:
