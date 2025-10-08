@@ -73,14 +73,3 @@ class Summation(ABC):
         resulting vector.
         """
         ...
-
-class Logger(ABC):
-    """
-    Interface class for different logger implementations
-    """
-    @abstractmethod
-    def __call__(self, iteration,recursion_operator, *args, **kargs):
-        """
-        Keep in memory the iteration and the recursion operator link to it
-        """
-        ...       

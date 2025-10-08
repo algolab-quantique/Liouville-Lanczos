@@ -136,7 +136,7 @@ class Lanczos():
             f_ip = self.sum(f_ip,- a_i*f_i,- b[-1]*f_im)
             try:
                 b2 = self.inner_prod(f_ip,f_ip,real_result=True,Name=f"b^2_{i+1}") #Always real
-                assert np.real(b2)>self.epsilon , f"b^2={b2} is smaller than {self.epsilon}, terminating"
+                assert b2>self.epsilon , f"b^2={b2} is smaller than {self.epsilon}, terminating"
                 b_ip = np.sqrt(b2)
             except Exception as e:
                 print(f"anomalous termination b at iteration {i}")

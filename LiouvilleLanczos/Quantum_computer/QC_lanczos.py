@@ -132,7 +132,6 @@ class inner_product_spo(Base_inner_product):
             ...
         isa_obs_real = obs_real.apply_layout(self.state.layout)
         out = np.real(self.estimator.run([(self.state,isa_obs_real)]).result()[0].data.evs)
-        out = complex(out)
         if not real_result:
             isa_obs_imag = obs_imag.apply_layout(self.state.layout)
             out_imag = np.real(self.estimator.run([(self.state,isa_obs_imag)]).result()[0].data.evs)
@@ -145,7 +144,7 @@ class inner_product_spo(Base_inner_product):
                 self.estimator.options.update(job_tags = tags)
         except:
             ...
-        return out
+        return out[0]
     
 class smart_inner_product_spo(Base_inner_product):
     def __init__(self, state: QuantumCircuit, sampler: BaseSamplerV2, epsilon: int, exp_dict = {}):
