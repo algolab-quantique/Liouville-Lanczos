@@ -112,7 +112,7 @@ class Lanczos():
         f_ip = self.Liouvillian(-H,f_i)
         a_i = self.inner_prod(f_ip,f_i,real_result=True,Name="a0")
         if self.logger:
-            self.logger(i,f_i,a_i,b[-1])
+            self.logger(i,f_i,a_i,b[-1,multimoments[-1]])
         f_ip = self.sum(f_ip, - a_i*f_i)
         b_ip = np.sqrt(self.inner_prod(f_ip,f_ip,real_result=True,Name="b1"))
         f_ip = f_ip / b_ip
@@ -132,11 +132,11 @@ class Lanczos():
                 return a,b,multimoments
             b.append(b_ip)
             if self.logger:
-                self.logger(i,f_i,a[-1],b[-1])
+                self.logger(i,f_i,a[-1],b[-1],multimoments[-1])
             f_ip = self.sum(f_ip,- a_i*f_i,- b[-1]*f_im)
             try:
                 b2 = self.inner_prod(f_ip,f_ip,real_result=True,Name=f"b^2_{i+1}") #Always real
-                assert b2>self.epsilon , f"b^2={b2} is smaller than {self.epsilon}, terminating"
+                assert np.real(b2)>self.epsilon , f"b^2={b2} is smaller than {self.epsilon}, terminating"
                 b_ip = np.sqrt(b2)
             except Exception as e:
                 print(f"anomalous termination b at iteration {i}")
@@ -144,8 +144,6 @@ class Lanczos():
                 return a,b,multimoments
             f_ip = f_ip / b_ip
             f_i,f_im = f_ip,f_i
-        if self.logger:
-            self.logger(i,f_i,a[-1],b[-1])
         return a,b,multimoments
          
     def __call__(self,H,f_0,max_k,min_b=1e-10):
