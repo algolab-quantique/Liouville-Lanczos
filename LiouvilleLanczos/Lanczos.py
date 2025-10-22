@@ -105,20 +105,36 @@ class Lanczos():
         Liouville-Lanczos' Green submodule contains the facilities to compute 
         the Fourrier transform of those response function.
         """
-        i=0
-        b = [np.sqrt(self.inner_prod(f_0,f_0,real_result=True,Name="b0"))]
-        f_i = f_0/b[-1]
-        multimoments = [[self.inner_prod(o,f_i,real_result=False,Name=f"m{m}_{0}") for m,o in enumerate(other_vectors)] ]
-        f_ip = self.Liouvillian(-H,f_i)
-        a_i = self.inner_prod(f_ip,f_i,real_result=True,Name="a0")
-        if self.logger:
-            self.logger(i,f_i,a_i,b[-1,multimoments[-1]])
-        f_ip = self.sum(f_ip, - a_i*f_i)
-        b_ip = np.sqrt(self.inner_prod(f_ip,f_ip,real_result=True,Name="b1"))
-        f_ip = f_ip / b_ip
-        a = [a_i]
-        f_i,f_im = f_ip,f_i
-        for i in range(1,max_k):
+        iterations=[]
+        if self.logger is not None :
+            iterations = self.logger.iterations
+        #If iterations' list is empty    
+        if not iterations:
+            i=0
+            b = [np.sqrt(self.inner_prod(f_0,f_0,real_result=True,Name="b0"))]
+            f_i = f_0/b[-1]
+            multimoments = [[self.inner_prod(o,f_i,real_result=False,Name=f"m{m}_{0}") for m,o in enumerate(other_vectors)] ]
+            f_ip = self.Liouvillian(-H,f_i)
+            a_i = self.inner_prod(f_ip,f_i,real_result=True,Name="a0")
+            if self.logger:
+                self.logger(i,f_i,a_i,b[-1], multimoments[-1])
+            f_ip = self.sum(f_ip, - a_i*f_i)
+            b_ip = np.sqrt(self.inner_prod(f_ip,f_ip,real_result=True,Name="b1"))
+            f_ip = f_ip / b_ip
+            a = [a_i]
+            f_i,f_im = f_ip,f_i
+            start = 1
+        else: # If not empty start the function at a precise iteration
+            start = iterations[-1]+1
+            f_i = self.logger.fi[-1]
+            f_im = self.logger.fi[-2]
+            b_ip = self.logger.bi[-1]
+            multimoments=[]
+            a = []
+            b = []
+            
+        for i in range(start,max_k):
+            print(f'currently at iteration {i}')
             if b_ip < min_b:
                 return a,b,multimoments
             multimoments.append([self.inner_prod(o,f_i,real_result=False,Name=f"m{m}_{i}") for m,o in enumerate(other_vectors)]) #**not** always real
