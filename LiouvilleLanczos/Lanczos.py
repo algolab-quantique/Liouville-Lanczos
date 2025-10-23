@@ -109,7 +109,15 @@ class Lanczos():
         if self.logger is not None :
             iterations = self.logger.iterations
         #If iterations' list is empty    
-        if not iterations:
+        if iterations:
+            start = iterations[-1]+1
+            f_i = self.logger.fi[-1]
+            f_im = self.logger.fi[-2]
+            b_ip = self.logger.bi[-1]
+            multimoments=[]
+            a = []
+            b = []
+        else: # If not empty start the function at a precise iteration
             i=0
             b = [np.sqrt(self.inner_prod(f_0,f_0,real_result=True,Name="b0"))]
             f_i = f_0/b[-1]
@@ -124,17 +132,7 @@ class Lanczos():
             a = [a_i]
             f_i,f_im = f_ip,f_i
             start = 1
-        else: # If not empty start the function at a precise iteration
-            start = iterations[-1]+1
-            f_i = self.logger.fi[-1]
-            f_im = self.logger.fi[-2]
-            b_ip = self.logger.bi[-1]
-            multimoments=[]
-            a = []
-            b = []
-            
         for i in range(start,max_k):
-            print(f'currently at iteration {i}')
             if b_ip < min_b:
                 return a,b,multimoments
             multimoments.append([self.inner_prod(o,f_i,real_result=False,Name=f"m{m}_{i}") for m,o in enumerate(other_vectors)]) #**not** always real
