@@ -38,3 +38,5 @@ article/*
 #qiskit binary structs
 *.qpy
 *.qasm
+
+trotter_balancing_results
