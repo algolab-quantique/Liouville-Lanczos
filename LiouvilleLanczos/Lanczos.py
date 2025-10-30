@@ -119,15 +119,15 @@ class Lanczos():
             b = []
         else: # If not empty start the function at a precise iteration
             i=0
-            b = [np.sqrt(self.inner_prod(f_0,f_0,real_result=True,Name="b0"))]
+            b = [np.sqrt(self.inner_prod(f_0,f_0,real_result=True,Name="b_0"))]
             f_i = f_0/b[-1]
             multimoments = [[self.inner_prod(o,f_i,real_result=False,Name=f"m{m}_{0}") for m,o in enumerate(other_vectors)] ]
             f_ip = self.Liouvillian(-H,f_i)
-            a_i = self.inner_prod(f_ip,f_i,real_result=True,Name="a0")
+            a_i = self.inner_prod(f_ip,f_i,real_result=True,Name="a_0")
             if self.logger:
                 self.logger(i,f_i,a_i,b[-1], multimoments[-1])
             f_ip = self.sum(f_ip, - a_i*f_i)
-            b_ip = np.sqrt(self.inner_prod(f_ip,f_ip,real_result=True,Name="b1"))
+            b_ip = np.sqrt(self.inner_prod(f_ip,f_ip,real_result=True,Name="b_1"))
             f_ip = f_ip / b_ip
             a = [a_i]
             f_i,f_im = f_ip,f_i
