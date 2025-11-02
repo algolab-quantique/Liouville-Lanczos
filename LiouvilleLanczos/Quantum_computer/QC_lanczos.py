@@ -115,7 +115,6 @@ class inner_product_spo(Base_inner_product):
         self.state = state
         self.estimator = estimator
         self.eps = epsilon
-        self.obs = {}
         
     def __call__(self,A:SparsePauliOp,B:SparsePauliOp,real_result:bool=False,Name:Optional[str]=None):
         """
@@ -126,19 +125,7 @@ class inner_product_spo(Base_inner_product):
         Bc = B.adjoint()
         f = A@Bc+Bc@A
         f = relative_simplify_spo(f,self.eps)
-        obs_real, obs_imag = separate_imag(f)
-
-        if Name is not None:
-            abm, iteration = Name.split('_')
-            if iteration == '0':
-                if abm not in self.obs: 
-                    self.obs[abm]=[]
-                else:
-                    self.obs['_'+abm] = self.obs[abm]
-                    self.obs[abm] = [] 
-            self.obs[abm].append(obs_real+1j*obs_imag)
-            print(f'    {abm} {iteration}', end='\n')
-        
+        obs_real, obs_imag = separate_imag(f)        
         out = complex(0)
         if any(np.abs(obs_real.coeffs)>=self.eps):
             isa_obs_real = obs_real.apply_layout(self.state.layout)
