@@ -18,7 +18,7 @@
 
 import numpy as np
 
-from .Lanczos_components import Inner_product,Liouvillian,Summation
+from LiouvilleLanczos.Lanczos_components import Inner_product,Liouvillian,Summation
 
 class Lanczos():
     """
@@ -80,7 +80,7 @@ class Lanczos():
     def setter(self,new_logger):
         self._logger = new_logger
 
-    def polynomial_hybrid(self,H,f_0,other_vectors,max_k,min_b=1e-10):
+    def polynomial_hybrid(self, H, f_0, other_vectors, max_k, min_b=1e-10):
         """
         Perform Lanczos recursion in the Krylov subspace spanned by the repeated 
         action of H on the initial vector f_0, and use it to compute polynomial 
@@ -105,60 +105,70 @@ class Lanczos():
         Liouville-Lanczos' Green submodule contains the facilities to compute 
         the Fourrier transform of those response function.
         """
-        iterations=[]
-        if self.logger is not None :
-            iterations = self.logger.iterations
-        #If iterations' list is empty    
-        if iterations:
-            start = iterations[-1]+1
-            f_i = self.logger.fi[-1]
-            f_im = self.logger.fi[-2]
-            b_ip = self.logger.bi[-1]
-            multimoments=[]
-            a = []
-            b = []
-        else: # If not empty start the function at a precise iteration
-            i=0
-            b = [np.sqrt(self.inner_prod(f_0,f_0,real_result=True,Name="b_0"))]
+        assert max_k > 1
+        use_checkpoint = False
+        if self.logger is not None:  # restart from logger content
+            saved_a = self.logger.results['a']
+            saved_b = self.logger.results['b']
+            saved_m = self.logger.results['mi']
+            saved_f = self.logger.results['fi']
+            ## need two iteration done
+            use_checkpoint = len(saved_a)>1 and len(saved_a)==len(saved_b)==len(saved_m)==len(saved_f) 
+        
+        if use_checkpoint:  # i = -2 ip = -1
+            i = len(saved_a)-1
+            if max_k <= len(saved_a):
+                return saved_a[:max_k], saved_b[:max_k], saved_m[:max_k]
+            ip = len(saved_a)
+            b = saved_b[:ip]
+            f_i = saved_f[i]
+            mi = saved_m[:ip]
+            f_ip = self.Liouvillian(-H, f_i)
+            a_i = saved_a[i]
+            a = saved_a[:ip]
+            start = ip
+        else:
+            i = 0
+            b = [np.sqrt(self.inner_prod(f_0, f_0, real_result=True, Name="b_0"))]
             f_i = f_0/b[-1]
-            multimoments = [[self.inner_prod(o,f_i,real_result=False,Name=f"m{m}_{0}") for m,o in enumerate(other_vectors)] ]
-            f_ip = self.Liouvillian(-H,f_i)
-            a_i = self.inner_prod(f_ip,f_i,real_result=True,Name="a_0")
+            mi = [[self.inner_prod(o, f_i, real_result=False, Name=f"m{m}_{0}") for m, o in enumerate(other_vectors)] ]
+            f_ip = self.Liouvillian(-H, f_i)
+            a_i = self.inner_prod(f_ip, f_i, real_result=True, Name="a_0")
             if self.logger:
-                self.logger(i,f_i,a_i,b[-1], multimoments[-1])
-            f_ip = self.sum(f_ip, - a_i*f_i)
-            b_ip = np.sqrt(self.inner_prod(f_ip,f_ip,real_result=True,Name="b_1"))
-            f_ip = f_ip / b_ip
+                self.logger(i, f_i, a_i, b[-1],  mi[-1])
             a = [a_i]
-            f_i,f_im = f_ip,f_i
             start = 1
-        for i in range(start,max_k):
+        f_ip = self.sum(f_ip, - a_i*f_i)
+        b_ip = np.sqrt(self.inner_prod(f_ip, f_ip, real_result=True, Name="b_1"))
+        f_ip = f_ip / b_ip
+        f_i, f_im = f_ip, f_i
+        for i in range(start, max_k):
             if b_ip < min_b:
-                return a,b,multimoments
-            multimoments.append([self.inner_prod(o,f_i,real_result=False,Name=f"m{m}_{i}") for m,o in enumerate(other_vectors)]) #**not** always real
-            f_ip = self.Liouvillian(-H,f_i)
+                return a, b, mi
+            mi.append([self.inner_prod(o, f_i, real_result=False, Name=f"m{m}_{i}") for m, o in enumerate(other_vectors)]) #**not** always real
+            f_ip = self.Liouvillian(-H, f_i)
             try:
-                a_i = self.inner_prod(f_ip,f_i,real_result=True,Name=f"a_{i}") #always real
+                a_i = self.inner_prod(f_ip, f_i, real_result=True, Name=f"a_{i}") #always real
                 a.append(a_i)
             except Exception as e:
                 print(f"early termination a at iteration {i}")
                 print(e)
-                return a,b,multimoments
+                return a, b, mi
             b.append(b_ip)
             if self.logger:
-                self.logger(i,f_i,a[-1],b[-1],multimoments[-1])
-            f_ip = self.sum(f_ip,- a_i*f_i,- b[-1]*f_im)
+                self.logger(i, f_i, a[-1], b[-1], mi[-1])
+            f_ip = self.sum(f_ip, -a_i*f_i, -b[-1]*f_im)
             try:
-                b2 = self.inner_prod(f_ip,f_ip,real_result=True,Name=f"b^2_{i+1}") #Always real
+                b2 = self.inner_prod(f_ip, f_ip, real_result=True, Name=f"b^2_{i+1}") #Always real
                 assert np.real(b2)>self.epsilon , f"b^2={b2} is smaller than {self.epsilon}, terminating"
                 b_ip = np.sqrt(b2)
             except Exception as e:
                 print(f"early termination b at iteration {i}")
                 print(e)
-                return a,b,multimoments
+                return a, b, mi
             f_ip = f_ip / b_ip
-            f_i,f_im = f_ip,f_i
-        return a,b,multimoments
+            f_i, f_im = f_ip, f_i
+        return a, b, mi
          
     def __call__(self,H,f_0,max_k,min_b=1e-10):
         """
