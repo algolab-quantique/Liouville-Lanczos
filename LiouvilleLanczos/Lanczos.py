@@ -105,9 +105,8 @@ class Lanczos():
         Liouville-Lanczos' Green submodule contains the facilities to compute 
         the Fourrier transform of those response function.
         """
-        assert max_k > 1
         use_checkpoint = False
-        if self.logger is not None:  # restart from logger content
+        if self.logger is not None:  # srtart from logger content
             saved_a = self.logger.results['a']
             saved_b = self.logger.results['b']
             saved_m = self.logger.results['mi']
@@ -117,6 +116,8 @@ class Lanczos():
         
         if use_checkpoint:  # i = -2 ip = -1
             i = len(saved_a)-1
+            if max_k is None:  # return full records
+                return saved_a, saved_b, saved_m
             if max_k <= len(saved_a):
                 return saved_a[:max_k], saved_b[:max_k], saved_m[:max_k]
             ip = len(saved_a)
@@ -128,6 +129,7 @@ class Lanczos():
             a = saved_a[:ip]
             start = ip
         else:
+            assert max_k > 1, "No checkpoint! use max_k > 1 to start computation"
             i = 0
             b = [np.sqrt(self.inner_prod(f_0, f_0, real_result=True, Name="b_0"))]
             f_i = f_0/b[-1]
