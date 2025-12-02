@@ -34,6 +34,7 @@ from qiskit.circuit.library import TwoLocal, RYGate, RZGate, CXGate, PauliEvolut
 from qiskit.circuit import Instruction, Qubit
 import numpy as np
 from typing import Optional
+import qiskit.qasm3 
 
 from qiskit.transpiler import PassManager
 from qiskit_ibm_runtime import RuntimeJobFailureError
@@ -162,7 +163,8 @@ class smart_inner_product_spo(Base_inner_product):
         self.eps = epsilon
         self.exp_dict = exp_dict
     
-    def __call__(self,A:SparsePauliOp,B:SparsePauliOp,real_result:bool=False,Name:Optional[str]=None):
+    def __call__(self,A:SparsePauliOp,B:SparsePauliOp,real_result:bool=False,Name:Optional[str]=None,shots:int=10000):
+
         Bc = B.adjoint()
         f = A@Bc+Bc@A
         f = relative_simplify_spo(f,self.eps)
@@ -196,17 +198,18 @@ class smart_inner_product_spo(Base_inner_product):
             cliques = to_eval.partition_with_fct(partition_same_x_plus_special)
             #produce measurement circuits associated with each clique
             for clique in cliques:
-                diag_part, factors_part, transformations_part_circuits = general_to_diagonal_with_circuit(clique.paulis, force_single_qubit_generators = True)
+                (diag_part, factors_part), transformations_part_circuits = general_to_diagonal_with_circuit(clique.paulis, force_single_qubit_generators = True)
                 coeffs = clique.weights
-                qc = self.state.compose(transformations_part_circuits)
+                qc = self.state.compose(qiskit.qasm3.loads(transformations_part_circuits))
                 qc.measure_all()
-                samples = self.sampler.run([qc]).result()[0].data.meas.get_counts()
+                samples = self.sampler.run([qc], shots=shots).result()[0].data.meas.get_counts()
                 #reconstruct expvals from samples, add to dictionary
                 for i, obs in enumerate(clique.paulis):
-                    expval = evaluate_diag_expval(diag_part[i], samples, self.sampler.default_shots)
+                    expval = evaluate_diag_expval(diag_part[i], samples, shots)
                     self.exp_dict[obs.to_labels()[0]] = expval
                     f_expval += factors_part[i] * expval * coeffs[i]
         return f_expval
+    
 
 class Liouvillian_spo(BaseLiouvillian):
     """
