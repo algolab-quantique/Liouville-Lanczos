@@ -107,12 +107,14 @@ class Lanczos():
         """
         use_checkpoint = False
         if self.logger is not None:  # srtart from logger content
-            saved_a = self.logger.results['a']
-            saved_b = self.logger.results['b']
-            saved_m = self.logger.results['mi']
-            saved_f = self.logger.results['fi']
-            ## need two iteration done
-            use_checkpoint = len(saved_a)>1 and len(saved_a)==len(saved_b)==len(saved_m)==len(saved_f) 
+            #If live logger load saved data
+            if hasattr(self.logger, 'results'):
+                saved_a = self.logger.results['a']
+                saved_b = self.logger.results['b']
+                saved_m = self.logger.results['mi']
+                saved_f = self.logger.results['fi']
+                ## need two iteration done
+                use_checkpoint = len(saved_a)>1 and len(saved_a)==len(saved_b)==len(saved_m)==len(saved_f) 
         
         if use_checkpoint:  # i = -2 ip = -1
             i = len(saved_a)-1
@@ -149,6 +151,7 @@ class Lanczos():
                 return a, b, mi
             mi.append([self.inner_prod(o, f_i, real_result=False, Name=f"m{m}_{i}") for m, o in enumerate(other_vectors)]) #**not** always real
             f_ip = self.Liouvillian(-H, f_i)
+            
             try:
                 a_i = self.inner_prod(f_ip, f_i, real_result=True, Name=f"a_{i}") #always real
                 a.append(a_i)
@@ -158,8 +161,9 @@ class Lanczos():
                 return a, b, mi
             b.append(b_ip)
             if self.logger:
-                self.logger(i, f_i, a[-1], b[-1], mi[-1])
+                self.logger(i, f_i, a[-1], b[-1], mi[-1])  
             f_ip = self.sum(f_ip, -a_i*f_i, -b[-1]*f_im)
+            
             try:
                 b2 = self.inner_prod(f_ip, f_ip, real_result=True, Name=f"b^2_{i+1}") #Always real
                 assert np.real(b2)>self.epsilon , f"b^2={b2} is smaller than {self.epsilon}, terminating"
