@@ -57,14 +57,14 @@ from ..Lanczos_components import Inner_product as Base_inner_product,Summation a
 from ..Lanczos_components import Liouvillian as BaseLiouvillian
 from ..operator_evolution import obs_time_evolver
 
-
 def relative_simplify_spo(ope:SparsePauliOp,eps:float):
     """
     relative simplify truncates terms with a relative participation smaller than eps.
     Qiskit quantum info sparse pauli operator based implementation.
     performs much better than slo.
     """
-    return ope.simplify(atol=1e-17,rtol=eps)
+
+    return ope.simplify(atol=eps,rtol=eps)
 
 def separate_imag(op: SparsePauliOp):
     """
