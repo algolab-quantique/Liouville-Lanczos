@@ -1,12 +1,12 @@
 #%%
-from LiouvilleLanczos.Quantum_computer.QC_lanczos import Liouvillian_slo,inner_product_slo,sum_slo
+from LiouvilleLanczos.Quantum_computer.QC_lanczos import Liouvillian_slo,inner_product_slo,sum_slo, Liouvillian_spo, inner_product_spo, sum_spo
 from LiouvilleLanczos.Quantum_computer.Hamiltonian import Line_Hubbard,BoundaryCondition
+from LiouvilleLanczos.Quantum_computer.sqd_lanczos import inner_product_spo_of_an_averageO
 from LiouvilleLanczos.Lanczos import Lanczos
 from LiouvilleLanczos.matrix_impl import MatrixState_inner_product,Matrix_Liouvillian,Matrix_sum
 from LiouvilleLanczos.Quantum_computer.Mapping import find_best_layout
 from LiouvilleLanczos.Green import CF_Green,Green_matrix,Lehmann_Green,PolyCF_Green,PolyLehmann_Green
 from qiskit.primitives import StatevectorEstimator as pEstimator
-
 from qiskit_nature.second_q.mappers import JordanWignerMapper
 from qiskit_nature.second_q.operators import FermionicOp
 from qiskit.quantum_info.operators import SparsePauliOp
@@ -65,17 +65,29 @@ a_ed,b_ed,mu_ed = matrix_lanczos.polynomial_hybrid(Hmat,C0_mat,[C2_mat],10)
 green_ed = CF_Green(a_ed,b_ed)
 # %% Quantum computer simulation
 eps = 1e-6
-SQ_inpro = inner_product_slo(GS_analytical,estimator,qubit_converter,eps)
-SQ_Liou = Liouvillian_slo(eps)
-lanczos = Lanczos(SQ_inpro,SQ_Liou,sum_slo(eps))
+SQ_inpro = inner_product_spo(GS_analytical,estimator,eps)
+SQ_Liou = Liouvillian_spo(eps)
+lanczos = Lanczos(SQ_inpro,SQ_Liou,sum_spo(eps))
 a_sim5,b_sim5,mu_sim5 = lanczos.polynomial_hybrid(Ham,C0,[C2],10,5e-3)
 green_sim = CF_Green(a_sim5,b_sim5)
+
+# Méthode averge operator spo
+eps = 1e-10
+avg_op = inner_product_spo_of_an_averageO(estimator,eps)
+SQ_inpro_avg = MatrixState_inner_product(GS_mat,avg_op)
+SQ_Liou_avg = Matrix_Liouvillian()
+lanczos_avg = Lanczos(SQ_inpro_avg,SQ_Liou_avg,Matrix_sum())
+a_avg,b_avg,mu_avg = lanczos_avg.polynomial_hybrid(Hmat,C0_mat,[C2_mat],10)
+green_avg = CF_Green(a_avg,b_avg)
+
 #%% We observe that the result are coherent.
 import matplotlib.pyplot as plt
 w = np.linspace(-5.5,5.5,1000)-1e-1j
 plt.plot(w,np.imag(green_sim(w)))
 # # plt.savefig("hubu4mu2.pdf")
 plt.plot(w,np.imag(green_ed(w)))
+
+plt.plot(w,np.imag(green_avg(w)))
 #%%
 from qiskit_ibm_runtime import (
     Session,

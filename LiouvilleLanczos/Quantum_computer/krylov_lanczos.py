@@ -2,13 +2,13 @@
 from qkip.layout import QubitsLayout
 from qkip.krylov import KrylovBasis, HeisenbergQKD, SimulationShadows
 from qiskit.quantum_info import SparsePauliOp
-from qiskit.primitives import BaseEstimatorV2
+from qiskit.primitives import BaseEstimatorV2, StatevectorEstimator
 from LiouvilleLanczos.Quantum_computer.QC_lanczos import relative_simplify_spo, separate_imag
 import numpy as np
 from LiouvilleLanczos.Lanczos_components import Inner_product as Base_inner_product
 from typing import Optional
+from averageO import average_operator
 # %%
-
 
 class krylov_inner_product_spo(Base_inner_product):
     def __init__(self,
@@ -51,3 +51,4 @@ class krylov_shadow_inner_product_spo(Base_inner_product):
         if real_result:
             return np.real(ans)
         return ans
+
