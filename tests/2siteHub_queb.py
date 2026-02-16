@@ -67,12 +67,12 @@ matrix_lanczos = Lanczos(MatrixState_inner_product(GS_mat),Matrix_Liouvillian(),
 a_ed,b_ed,mu_ed = matrix_lanczos.polynomial_hybrid(Hmat,C0_mat,[C2_mat],10)
 green_ed = CF_Green(a_ed,b_ed)
 # %% Quantum computer simulation
-eps = 1e-6
-SQ_inpro = inner_product_spo(GS_analytical,estimator,eps)
-SQ_Liou = Liouvillian_spo(eps)
-lanczos = Lanczos(SQ_inpro,SQ_Liou,sum_spo(eps))
-a_sim5,b_sim5,mu_sim5 = lanczos.polynomial_hybrid(HHam,C0_spo,[C2_spo],10,5e-3)
-green_sim = CF_Green(a_sim5,b_sim5)
+# eps = 1e-6
+# SQ_inpro = inner_product_spo(GS_analytical,estimator,eps)
+# SQ_Liou = Liouvillian_spo(eps)
+# lanczos = Lanczos(SQ_inpro,SQ_Liou,sum_spo(eps))
+# a_sim5,b_sim5,mu_sim5 = lanczos.polynomial_hybrid(HHam,C0_spo,[C2_spo],10,5e-3)
+# green_sim = CF_Green(a_sim5,b_sim5)
 
 # ma methode
 eps = 1e-6
@@ -90,7 +90,8 @@ green_oli = CF_Green(a_avg,b_avg)
 #%% We observe that the result are coherent.
 import matplotlib.pyplot as plt
 w = np.linspace(-5.5,5.5,1000)-1e-1j
-plt.plot(w,np.imag(green_sim(w)))
+#
+# plt.plot(w,np.imag(green_sim(w)))
 # # plt.savefig("hubu4mu2.pdf")
 plt.plot(w,np.imag(green_ed(w)))
 

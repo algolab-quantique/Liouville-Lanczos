@@ -18,105 +18,152 @@ from qiskit_nature.second_q.hamiltonians.lattices import LineLattice
 from qiskit_nature.second_q.operators import FermionicOp
 from qiskit.quantum_info import Statevector
 import time
+import matplotlib.pyplot as plt
 #%%
-line = LineLattice(4)
-hub = FermiHubbardModel(line, onsite_interaction = 1)
 mapper = JordanWignerMapper()
-hub = hub.second_q_op()
-hub_spo = mapper.map(hub)
-
-C0= FermionicOp(
+doubble_occup = FermionicOp(
+    {
+        "+_0 +_4 -_4 -_0": 1,
+        "+_1 +_5 -_5 -_1": 1,
+        "+_2 +_6 -_6 -_2": 1,
+        "+_3 +_7 -_7 -_3": 1,
+    },
+    num_spin_orbitals=8,
+)
+first_hop = FermionicOp(
+    {
+        "+_0 -_1": 1,
+        "+_1 -_0": 1,
+        "+_1 -_2": 1,
+        "+_2 -_1": 1,
+        "+_2 -_3": 1,
+        "+_3 -_2": 1,
+        "+_4 -_5": 1,
+        "+_5 -_4": 1,
+        "+_5 -_6": 1,
+        "+_6 -_5": 1,
+        "+_6 -_7": 1,
+        "+_7 -_6": 1,
+    },
+    num_spin_orbitals=8,
+)
+Number_op = FermionicOp(
+    {
+    '+_0 -_0':1,
+    '+_1 -_1':1,
+    '+_2 -_2':1,
+    '+_3 -_3':1,
+    '+_4 -_4':1,
+    '+_5 -_5':1,
+    '+_6 -_6':1,
+    '+_7 -_7':1,
+    },
+    num_spin_orbitals=8
+    )
+C0u= FermionicOp(
     {
         "+_0": 1,
     },
     num_spin_orbitals=8,
 )
-C1= FermionicOp(
+C1u= FermionicOp(
+    {
+        "+_1": 1,
+    },
+    num_spin_orbitals=8,
+)
+C2u= FermionicOp(
     {
         "+_2": 1,
     },
     num_spin_orbitals=8,
 )
-C2= FermionicOp(
+C3u= FermionicOp(
     {
-        "+_4": 1,
+        "+_3": 1,
     },
     num_spin_orbitals=8,
 )
-C3= FermionicOp(
-    {
-        "+_6": 1,
-    },
-    num_spin_orbitals=8,
-)
-C0_spo = mapper.map(C0)
-C1_spo = mapper.map(C1)
-C2_spo = mapper.map(C2)
-C3_spo = mapper.map(C3)
+
+C0_spo = mapper.map(C0u)
+C1_spo = mapper.map(C1u)
+C2_spo = mapper.map(C2u)
+C3_spo = mapper.map(C3u)
 C0_mat = C0_spo.to_matrix()
 C1_mat = C1_spo.to_matrix()
 C2_mat = C2_spo.to_matrix()
 C3_mat = C3_spo.to_matrix()
-
-Hmat = hub_spo.to_matrix()
-E,S = np.linalg.eigh(Hmat)
+t = -1
+U = 4
+mu = U/2
+Hubbard_FOP = t*first_hop-mu*Number_op+U*doubble_occup
+Hubbard_FOP
+HAM = mapper.map(Hubbard_FOP)
+Hubbard_matrix = HAM.to_matrix()
+E,S = np.linalg.eigh(Hubbard_matrix)
+print("Exact", E[0])
 #%%
-GS_4site = QuantumCircuit(8)
-for q in [0,1,2,3]:
-    GS_4site.x(q)
-ansatz = real_amplitudes(num_qubits=8, entanglement='linear')
-GS_4site.compose(ansatz, inplace=True)
+hub_spo = HAM
+Hmat = Hubbard_matrix
 
-#%% VQE to find ground state
-estimator = pEstimator()
-optimiser = COBYLA(maxiter=300)
-vqe = VQE(estimator=estimator, ansatz=GS_4site, optimizer=optimiser)
-res = vqe.compute_minimum_eigenvalue(hub_spo)
+#%%
+# States from hamiltonian ground state
+e,v = np.linalg.eig(Hmat)
+gs_id = np.argmin(e)
+sv = Statevector(v[:,gs_id])
+n = sv.num_qubits
 
-print("Exact GS energy:", E[0])
-print("VQE energy:", res.eigenvalue.real)
-GS_opt = GS_4site.assign_parameters(res.optimal_parameters)
-GS_vec = Statevector.from_instruction(GS_opt).data
-
+shots = 1000
+samples = sv.sample_counts(shots)
+bitstrings = list(samples.keys())
+filtered_states = np.array(
+    [[int(b) for b in s] for s in bitstrings],
+    dtype=str
+)
+indices = np.array([int(s, 2) for s in bitstrings])
+filtered_coeffs = sv.data[indices]
+print("Bitstrings mesurés :")
+print(filtered_states)
+print("Coefficients mesurés :")
+print(filtered_coeffs)
 
 #%% Classical green's function
 start = time.perf_counter()
-matrix_lanczos = Lanczos(MatrixState_inner_product(GS_vec),Matrix_Liouvillian(),Matrix_sum())
-a_ed,b_ed,mu_ed = matrix_lanczos.polynomial_hybrid(Hmat, C0_mat,[C1_mat,C2_mat,C3_mat],10)
+matrix_lanczos = Lanczos(MatrixState_inner_product(sv.data),Matrix_Liouvillian(),Matrix_sum())
+a_ed,b_ed,mu_ed = matrix_lanczos.polynomial_hybrid(Hmat, C0_mat,[C1_mat,C2_mat,C3_mat],30)
 green_ed = CF_Green(a_ed,b_ed)
 end = time.perf_counter()
 print("Classical green time:", f"{end - start:.6f} s")
-#%% Quantum green's function
-start = time.perf_counter()
-eps = 1e-6
-SQ_inpro = inner_product_spo(GS_opt,estimator,eps)
-SQ_Liou = Liouvillian_spo(eps)
-lanczos = Lanczos(SQ_inpro,SQ_Liou,sum_spo(eps))
-a_sim5,b_sim5,mu_sim5 = lanczos.polynomial_hybrid(hub_spo, C0_spo,[C1_spo,C2_spo,C3_spo],10,5e-3)
-green_sim = CF_Green(a_sim5,b_sim5)
-end = time.perf_counter()
-print("Quantum green time:", f"{end - start:.6f} s")
+
 #%% SQD's green's function
-start = time.perf_counter()
-eps = 1e-6
-statevector = qiskit.quantum_info.Statevector.from_instruction(GS_opt)
-n = statevector.num_qubits
-coeffs = statevector.data.copy()
-idx = np.arange(2**n)
-states = np.array([list(format(i,f'0{n}b')) for i in idx],dtype=str)
-avg_op = inner_product_spo_sqd(states,coeffs,eps)
-SQ_Liou_avg = Liouvillian_spo(eps)
-lanczos_avg = Lanczos(avg_op,SQ_Liou_avg,sum_spo(eps))
-a_avg,b_avg,mu_avg = lanczos_avg.polynomial_hybrid(hub_spo, C0_spo,[C1_spo,C2_spo,C3_spo],4,5e-3)
-green_sqd = CF_Green(a_avg,b_avg)
-end = time.perf_counter()
-print("SQD's green time:", f"{end - start:.6f} s")
+
+iterations_list = [10]
+times = []
+eps = 1e-3
+for i in iterations_list:
+    start = time.perf_counter()
+    avg_op = inner_product_spo_sqd(filtered_states,filtered_coeffs,eps)
+    SQ_Liou_avg = Liouvillian_spo(eps)
+    lanczos_avg = Lanczos(avg_op,SQ_Liou_avg,sum_spo(eps))
+    a_avg,b_avg,mu_avg = lanczos_avg.polynomial_hybrid(hub_spo, C0_spo,[C1_spo,C2_spo,C3_spo],i)
+    green_sqd = CF_Green(a_avg,b_avg)
+    end = time.perf_counter()
+    times.append(end - start)
+    print(f"Iterations = {i} | Temps = {end - start:.6f} s")
+
+# Plot
+plt.figure()
+plt.plot(iterations_list, times, marker='o')
+plt.xlabel("Nombre d'itérations Lanczos")
+plt.ylabel("Temps de calcul (s)")
+plt.title("Temps de calcul vs nombre d'itérations")
+plt.grid(True)
+plt.show()
 #%%
 import matplotlib.pyplot as plt
 w = np.linspace(-5.5,5.5,1000)-1e-1j
-plt.plot(w,np.imag(green_sim(w)))
+#%%
+plt.plot(w,np.imag(green_ed(w)), label='Exact', color='blue')
 
-plt.plot(w,np.imag(green_ed(w)))
-
-plt.plot(w,np.imag(green_sqd(w)),'--')
+plt.plot(w,np.imag(green_sqd(w)),'--', label='SQD', color='red')
 #%%
