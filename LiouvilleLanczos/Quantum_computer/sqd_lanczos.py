@@ -7,6 +7,7 @@ import time
 
 
 #%%
+
 def operator_average_value(f:SparsePauliOp, states:np.ndarray, coeffs:np.ndarray):
     """Compute the average value of a given operator over a set of quantum states.
     Args:
@@ -16,32 +17,24 @@ def operator_average_value(f:SparsePauliOp, states:np.ndarray, coeffs:np.ndarray
     Returns:
         complex: The average value of the operator over the states.
     """
-    states = np.asarray(states).astype(np.int8)
+    states = np.asarray(states, dtype=np.int8)
 
-    p = np.asarray(f.coeffs)
+    f_z = f.paulis.z.astype(np.int8)   # (k,q)
+    f_x = f.paulis.x.astype(np.int8)
 
-    X = f.paulis.x.astype(np.int8)   # (k,q)
-    Z = f.paulis.z.astype(np.int8)
+    ij_states = np.mod(states[:,None,:] + states[None,:,:],2)
+    ijk_states_obs_x = np.mod(ij_states[:,:,None,:] + f_x[None,None,:,:],2)
 
-    b_iq = states[:,None,None,:]   # (N,1,1,q)
-    b_jq = states[None,:,None,:]   # (1,N,1,q)
+    ijk_delta = np.all(ijk_states_obs_x == 0, axis=-1)   # (N,N,k)
 
-    # Delta : bi = bj xor Xk
-    delta = (b_iq == (b_jq ^ X))
-    delta = np.all(delta, axis=-1)    # (N,N,k)
+    k_phase_y = np.choose(np.sum(f_z * f_x, axis=-1), [1, -1j, -1, 1j],mode='wrap')   
+    ik_eigenvalues = np.choose(np.sum(states[:,None,:] * f_z[None,:,:], axis=-1), [1, -1],mode='wrap')   
 
-    # Phases
-    phase_z = (-1)**(Z & b_iq)
-    phase_y = (-1j)**(Z & X)
+    k_p = np.asarray(f.coeffs, dtype=complex)
 
-    equation = phase_z * phase_y * delta[...,None]
+    expval = np.einsum('i,j,k,ijk,k,ik->', np.conj(coeffs), coeffs, k_p, ijk_delta, k_phase_y, ik_eigenvalues)
 
-    # Produit sur q
-    container = np.prod(equation, axis=-1)   # (N,N,k)
-
-    result = np.sum(p[None,None,:] * np.conj(coeffs)[:,None,None] * coeffs[None,:,None] * container)
-
-    return result
+    return complex(expval)
 
 class inner_product_spo_sqd(Base_inner_product):
     def __init__(self,
