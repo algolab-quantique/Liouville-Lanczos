@@ -32,7 +32,8 @@ def operator_average_value(f:SparsePauliOp, states:np.ndarray, coeffs:np.ndarray
 
     k_p = np.asarray(f.coeffs, dtype=complex)
 
-    expval = np.einsum('i,j,k,ijk,k,ik->', np.conj(coeffs), coeffs, k_p, ijk_delta, k_phase_y, ik_eigenvalues)
+    ij_mat = np.einsum('k,ijk,k,ik->ij', k_p, ijk_delta, k_phase_y, ik_eigenvalues)   # (N,N)
+    expval = np.einsum('i,j,ij', coeffs, coeffs, ij_mat)   
 
     return complex(expval)
 

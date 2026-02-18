@@ -114,7 +114,7 @@ sv = Statevector(v[:,gs_id])
 n = sv.num_qubits
 
 shots = 1000
-samples = sv.sample_counts(shots)
+samples = sv.sample_counts(shots, seed=42)
 bitstrings = list(samples.keys())
 filtered_states = np.array(
     [[int(b) for b in s] for s in bitstrings],
@@ -137,7 +137,7 @@ print("Classical green time:", f"{end - start:.6f} s")
 
 #%% SQD's green's function
 
-iterations_list = [10]
+iterations_list = [5, 10, 15, 20, 25, 30]
 times = []
 eps = 1e-3
 for i in iterations_list:
@@ -158,6 +158,7 @@ plt.xlabel("Nombre d'itérations Lanczos")
 plt.ylabel("Temps de calcul (s)")
 plt.title("Temps de calcul vs nombre d'itérations")
 plt.grid(True)
+plt.ylim(0, 1000)
 plt.show()
 #%%
 import matplotlib.pyplot as plt
@@ -167,3 +168,11 @@ plt.plot(w,np.imag(green_ed(w)), label='Exact', color='blue')
 
 plt.plot(w,np.imag(green_sqd(w)),'--', label='SQD', color='red')
 #%%
+plt.figure()
+plt.plot(iterations_list, np.log(times), marker='o')
+plt.xlabel("Nombre d'itérations Lanczos")
+plt.ylabel("log(Temps de calcul (s))")
+plt.title("Log-Temps de calcul vs nombre d'itérations")
+plt.grid(True)
+plt.show()
+# %%
