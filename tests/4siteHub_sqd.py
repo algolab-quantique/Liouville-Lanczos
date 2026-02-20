@@ -6,7 +6,7 @@ from LiouvilleLanczos.matrix_impl import MatrixState_inner_product,Matrix_Liouvi
 from LiouvilleLanczos.Green import CF_Green
 from qiskit.primitives import StatevectorEstimator as pEstimator
 from qiskit_nature.second_q.mappers import JordanWignerMapper
-from qiskit import QuantumCircuit
+from qiskit import QuantumCircuit, transpile
 import qiskit
 import numpy as np
 from qiskit.circuit.library import real_amplitudes
@@ -112,9 +112,9 @@ e,v = np.linalg.eig(Hmat)
 gs_id = np.argmin(e)
 sv = Statevector(v[:,gs_id])
 n = sv.num_qubits
-
+sv.seed(42)
 shots = 1000
-samples = sv.sample_counts(shots, seed=42)
+samples = sv.sample_counts(shots)
 bitstrings = list(samples.keys())
 filtered_states = np.array(
     [[int(b) for b in s] for s in bitstrings],
@@ -122,10 +122,46 @@ filtered_states = np.array(
 )
 indices = np.array([int(s, 2) for s in bitstrings])
 filtered_coeffs = sv.data[indices]
-print("Bitstrings mesurés :")
 print(filtered_states)
-print("Coefficients mesurés :")
-print(filtered_coeffs)
+#%%
+# Sample states on quantum computer
+from qiskit_ibm_runtime import QiskitRuntimeService, EstimatorV2
+from qiskit_ibm_runtime import SamplerV2 as Sampler
+
+service = QiskitRuntimeService()
+backend = service.backends()[0]
+print(f"Using backend: {backend.name}")
+
+#%%
+from qiskit_aer import AerSimulator
+ansatz = real_amplitudes(num_qubits=8, entanglement='linear')
+optimizer = COBYLA(maxiter=1000)
+estimator = EstimatorV2(mode=AerSimulator())
+vqe = VQE(estimator, ansatz, optimizer)
+result = vqe.compute_minimum_eigenvalue(HAM)
+optimal_params = result.optimal_parameters
+
+#%%
+qc = ansatz.assign_parameters(optimal_params)
+qc.measure_all()
+qc = transpile(qc, backend)
+sampler = Sampler(mode=backend)
+job = sampler.run([qc], shots=1000)
+result = job.result()
+counts = result[0].data.meas.get_counts()
+
+#%% States et coeffs from job
+bitstrings = list(counts.keys())
+#check nb de 1 et rejeter les états qui en ont pas 4
+bitstrings = [s for s in bitstrings if s.count('1') == 4]
+states = np.array(
+    [[int(b) for b in s] for s in bitstrings],
+    dtype=np.int8
+)
+shots_total = sum(counts.values())
+coeffs = np.sqrt(
+    np.array([counts[s] / shots_total for s in bitstrings])
+)
 
 #%% Classical green's function
 start = time.perf_counter()
@@ -142,7 +178,7 @@ times = []
 eps = 1e-3
 for i in iterations_list:
     start = time.perf_counter()
-    avg_op = inner_product_spo_sqd(filtered_states,filtered_coeffs,eps)
+    avg_op = inner_product_spo_sqd(states,coeffs,eps)
     SQ_Liou_avg = Liouvillian_spo(eps)
     lanczos_avg = Lanczos(avg_op,SQ_Liou_avg,sum_spo(eps))
     a_avg,b_avg,mu_avg = lanczos_avg.polynomial_hybrid(hub_spo, C0_spo,[C1_spo,C2_spo,C3_spo],i)
@@ -150,7 +186,7 @@ for i in iterations_list:
     end = time.perf_counter()
     times.append(end - start)
     print(f"Iterations = {i} | Temps = {end - start:.6f} s")
-
+#%%
 # Plot
 plt.figure()
 plt.plot(iterations_list, times, marker='o')
@@ -158,7 +194,7 @@ plt.xlabel("Nombre d'itérations Lanczos")
 plt.ylabel("Temps de calcul (s)")
 plt.title("Temps de calcul vs nombre d'itérations")
 plt.grid(True)
-plt.ylim(0, 1000)
+#plt.ylim(0, 1000)
 plt.show()
 #%%
 import matplotlib.pyplot as plt
