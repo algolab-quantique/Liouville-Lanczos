@@ -19,6 +19,8 @@ from qiskit_nature.second_q.operators import FermionicOp
 from qiskit.quantum_info import Statevector
 import time
 import matplotlib.pyplot as plt
+from qiskit.primitives import StatevectorEstimator as pEstimator
+
 #%%
 mapper = JordanWignerMapper()
 doubble_occup = FermionicOp(
@@ -102,27 +104,26 @@ HAM = mapper.map(Hubbard_FOP)
 Hubbard_matrix = HAM.to_matrix()
 E,S = np.linalg.eigh(Hubbard_matrix)
 print("Exact", E[0])
-#%%
 hub_spo = HAM
 Hmat = Hubbard_matrix
 
 #%%
 # States from hamiltonian ground state
-e,v = np.linalg.eig(Hmat)
-gs_id = np.argmin(e)
-sv = Statevector(v[:,gs_id])
-n = sv.num_qubits
-sv.seed(42)
-shots = 1000
-samples = sv.sample_counts(shots)
-bitstrings = list(samples.keys())
-filtered_states = np.array(
-    [[int(b) for b in s] for s in bitstrings],
-    dtype=str
-)
-indices = np.array([int(s, 2) for s in bitstrings])
-filtered_coeffs = sv.data[indices]
-print(filtered_states)
+E,V = np.linalg.eig(Hmat)
+gs_id = np.argmin(E)
+sv = Statevector(V[:,gs_id])
+# n = sv.num_qubits
+# sv.seed(42)
+# shots = 1000
+# samples = sv.sample_counts(shots)
+# bitstrings = list(samples.keys())
+# filtered_states = np.array(
+#     [[int(b) for b in s] for s in bitstrings],
+#     dtype=str
+# )
+# indices = np.array([int(s, 2) for s in bitstrings])
+# filtered_coeffs = sv.data[indices]
+# print(filtered_states)
 #%%
 # Sample states on quantum computer
 from qiskit_ibm_runtime import QiskitRuntimeService, EstimatorV2
@@ -133,13 +134,18 @@ backend = service.backends()[0]
 print(f"Using backend: {backend.name}")
 
 #%%
-from qiskit_aer import AerSimulator
+ansatz = QuantumCircuit(4)
+for q in range(4):
+    ansatz.x(q)
 ansatz = real_amplitudes(num_qubits=8, entanglement='linear')
+ansatz.compose(ansatz, inplace=True)
 optimizer = COBYLA(maxiter=1000)
-estimator = EstimatorV2(mode=AerSimulator())
-vqe = VQE(estimator, ansatz, optimizer)
+estimator = pEstimator()
+vqe = VQE(estimator=estimator, ansatz=ansatz, optimizer=optimizer)
 result = vqe.compute_minimum_eigenvalue(HAM)
 optimal_params = result.optimal_parameters
+energie = result.eigenvalue.real
+print("VQE Energy:", energie)
 
 #%%
 qc = ansatz.assign_parameters(optimal_params)
@@ -154,26 +160,54 @@ counts = result[0].data.meas.get_counts()
 bitstrings = list(counts.keys())
 #check nb de 1 et rejeter les états qui en ont pas 4
 bitstrings = [s for s in bitstrings if s.count('1') == 4]
+bitstrings = list(set(bitstrings))
 states = np.array(
     [[int(b) for b in s] for s in bitstrings],
     dtype=np.int8
 )
-shots_total = sum(counts.values())
-coeffs = np.sqrt(
-    np.array([counts[s] / shots_total for s in bitstrings])
-)
+def H_tilde_from_bitstring(states, hub_spo):
+
+    P = np.array([list(label[::-1]) for label in hub_spo.paulis.to_labels()])
+    p = hub_spo.coeffs
+    N, q = states.shape
+    k = P.shape[0]
+
+    b_iq = states[:, None, None, :]
+    b_jq = states[None, :, None, :]
+    P = P[None, None, :, :]
+
+    container = np.zeros((N,N,k,q), dtype=complex)
+    container += ( (b_iq == 0) & (b_jq == 0) & (P == 'I') ) * 1 
+    container += ( (b_iq == 1) & (b_jq == 1) & (P == 'I') ) * 1
+    container += ( (b_iq == 0) & (b_jq == 1) & (P == 'X') ) * 1
+    container += ( (b_iq == 1) & (b_jq == 0) & (P == 'X') ) * 1
+    container += ( (b_iq == 0) & (b_jq == 1) & (P == 'Y') ) * (-1j)
+    container += ( (b_iq == 1) & (b_jq == 0) & (P == 'Y') ) * (1j)
+    container += ( (b_iq == 0) & (b_jq == 0) & (P == 'Z') ) * 1
+    container += ( (b_iq == 1) & (b_jq == 1) & (P == 'Z') ) * (-1)
+
+    container = np.prod(container, axis=-1)
+    H_tilde = np.sum(container * p[None, None, :], axis=-1)
+    return H_tilde 
+
+H_tilde = H_tilde_from_bitstring(states, hub_spo)
+e, v = np.linalg.eig(H_tilde)
+gs_energie = np.min(e).real
+coeffs = v[:, np.argmin(e)]
+print("Energy from sampled states:", gs_energie)
+
 
 #%% Classical green's function
 start = time.perf_counter()
 matrix_lanczos = Lanczos(MatrixState_inner_product(sv.data),Matrix_Liouvillian(),Matrix_sum())
-a_ed,b_ed,mu_ed = matrix_lanczos.polynomial_hybrid(Hmat, C0_mat,[C1_mat,C2_mat,C3_mat],30)
+a_ed,b_ed,mu_ed = matrix_lanczos.polynomial_hybrid(Hmat, C0_mat,[C1_mat,C2_mat,C3_mat],10)
 green_ed = CF_Green(a_ed,b_ed)
 end = time.perf_counter()
 print("Classical green time:", f"{end - start:.6f} s")
 
 #%% SQD's green's function
 
-iterations_list = [5, 10, 15, 20, 25, 30]
+iterations_list = [10]
 times = []
 eps = 1e-3
 for i in iterations_list:
@@ -211,4 +245,6 @@ plt.ylabel("log(Temps de calcul (s))")
 plt.title("Log-Temps de calcul vs nombre d'itérations")
 plt.grid(True)
 plt.show()
+# %%
+
 # %%

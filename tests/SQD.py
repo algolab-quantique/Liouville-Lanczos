@@ -1,16 +1,17 @@
 #%%
+import math
+ 
+import ffsim
+import matplotlib.pyplot as plt
+import numpy as np
 import pyscf
 import pyscf.cc
 import pyscf.mcscf
-import ffsim
-import numpy as np
-import matplotlib.pyplot as plt 
 from qiskit import QuantumCircuit, QuantumRegister
-from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager 
+from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 from qiskit_ibm_runtime import QiskitRuntimeService
 from qiskit_ibm_runtime import SamplerV2 as Sampler
 from zigzag_layout import get_zigzag_physical_layout
-from qiskit_aer import AerSimulator
 
 #%%
 # Specify molecule properties
@@ -24,24 +25,24 @@ mol.build(
     basis="cc-pvdz",
     symmetry="Dooh",
 )
- 
+
 # Define active space
 n_frozen = 2
 active_space = range(n_frozen, mol.nao_nr())
  
 # Get molecular integrals
 scf = pyscf.scf.RHF(mol).run()
-num_orbitals = len(active_space)
+norb = len(active_space)
 n_electrons = int(sum(scf.mo_occ[active_space]))
-num_elec_a = (n_electrons + mol.spin) // 2
-num_elec_b = (n_electrons - mol.spin) // 2
-cas = pyscf.mcscf.CASCI(scf, num_orbitals, (num_elec_a, num_elec_b))
+n_alpha = (n_electrons + mol.spin) // 2
+n_beta = (n_electrons - mol.spin) // 2
+cas = pyscf.mcscf.CASCI(scf, norb, (n_alpha, n_beta))
 mo = cas.sort_mo(active_space, base=0)
 hcore, nuclear_repulsion_energy = cas.get_h1cas(mo)
-eri = pyscf.ao2mo.restore(1, cas.get_h2cas(mo), num_orbitals)
+eri = pyscf.ao2mo.restore(1, cas.get_h2cas(mo), norb)
  
 # Store reference energy from SCI calculation performed separately
-exact_energy = -109.22690201485733
+reference_energy = -109.22802921665716
 #%%
 # Get CCSD t2 amplitudes for initializing the ansatz
 ccsd = pyscf.cc.CCSD(
@@ -51,8 +52,8 @@ t1 = ccsd.t1
 t2 = ccsd.t2
 #%%
 n_reps = 1
-alpha_alpha_indices = [(p, p + 1) for p in range(num_orbitals - 1)]
-alpha_beta_indices = [(p, p) for p in range(0, num_orbitals, 4)]
+alpha_alpha_indices = [(p, p + 1) for p in range(norb - 1)]
+alpha_beta_indices = [(p, p) for p in range(0, norb, 4)]
  
  
 ucj_op = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
@@ -67,34 +68,30 @@ ucj_op = ffsim.UCJOpSpinBalanced.from_t_amplitudes(
     options=dict(maxiter=1000),
 )
  
-nelec = (num_elec_a, num_elec_b)
+nelec = (n_alpha, n_beta)
  
 # create an empty quantum circuit
-qubits = QuantumRegister(2 * num_orbitals, name="q")
+qubits = QuantumRegister(2 * norb, name="q")
 circuit = QuantumCircuit(qubits)
  
 # prepare Hartree-Fock state as the reference state and append it to the quantum circuit
-circuit.append(ffsim.qiskit.PrepareHartreeFockJW(num_orbitals, nelec), qubits)
+circuit.append(ffsim.qiskit.PrepareHartreeFockJW(norb, nelec), qubits)
  
 # apply the UCJ operator to the reference state
 circuit.append(ffsim.qiskit.UCJOpSpinBalancedJW(ucj_op), qubits)
-#circuit.measure_all()
-print(qubits)
+circuit.measure_all()
 #%%
 service = QiskitRuntimeService()
-backend = service.least_busy(
-    operational=True, simulator=False, min_num_qubits=133
-)
+backend = service.backends()[0]
  
 print(f"Using backend {backend.name}")
 
 #%%
-initial_layout, _ = get_zigzag_physical_layout(num_orbitals, backend=backend)
+initial_layout, _ = get_zigzag_physical_layout(norb, backend=backend)
  
 pass_manager = generate_preset_pass_manager(
     optimization_level=3, backend=backend, initial_layout=initial_layout
 )
-
  
 # without PRE_INIT passes
 isa_circuit = pass_manager.run(circuit)
@@ -112,6 +109,31 @@ primitive_result = job.result()
 pub_result = primitive_result[0]
 
 #%%
+def is_valid_bitstring(
+    bitstring: str, norb: int, nelec: tuple[int, int]
+) -> bool:
+    n_alpha, n_beta = nelec
+    return (
+        len(bitstring) == 2 * norb
+        and bitstring[norb:].count("1") == n_alpha
+        and bitstring[:norb].count("1") == n_beta
+    )
+ 
+ 
+bit_array = pub_result.data.meas
+num_valid = sum(
+    is_valid_bitstring(b, norb, nelec) for b in bit_array.get_bitstrings()
+)
+valid_fraction = num_valid / bit_array.num_shots
+print(f"Fraction of sampled configurations that are valid: {valid_fraction}")
+#%%
+expected_fraction_random = (
+    math.comb(norb, n_alpha) * math.comb(norb, n_beta) / 2 ** (2 * norb)
+)
+print(
+    f"Expected fraction of valid configurations from uniformly random bitstrings: {expected_fraction_random}"
+)
+#%%
 from functools import partial
  
 from qiskit_addon_sqd.fermion import (
@@ -119,7 +141,7 @@ from qiskit_addon_sqd.fermion import (
     diagonalize_fermionic_hamiltonian,
     solve_sci_batch,
 )
- 
+
 # SQD options
 energy_tol = 1e-3
 occupancies_tol = 1e-3
@@ -132,6 +154,12 @@ symmetrize_spin = True
 carryover_threshold = 1e-4
 max_cycle = 200
  
+# Use the Hartree-Fock configuration as an initial guess for the orbital occupancies
+initial_occupancies = (
+    np.array([1] * n_alpha + [0] * (norb - n_alpha)),
+    np.array([1] * n_beta + [0] * (norb - n_beta)),
+)
+ 
 # Pass options to the built-in eigensolver. If you just want to use the defaults,
 # you can omit this step, in which case you would not specify the sci_solver argument
 # in the call to diagonalize_fermionic_hamiltonian below.
@@ -139,6 +167,7 @@ sci_solver = partial(solve_sci_batch, spin_sq=0.0, max_cycle=max_cycle)
  
 # List to capture intermediate results
 result_history = []
+
  
  
 def callback(results: list[SCIResult]):
@@ -156,9 +185,9 @@ def callback(results: list[SCIResult]):
 result = diagonalize_fermionic_hamiltonian(
     hcore,
     eri,
-    pub_result.data.meas,
+    bit_array,
     samples_per_batch=samples_per_batch,
-    norb=num_orbitals,
+    norb=norb,
     nelec=nelec,
     num_batches=num_batches,
     energy_tol=energy_tol,
@@ -166,10 +195,16 @@ result = diagonalize_fermionic_hamiltonian(
     max_iterations=max_iterations,
     sci_solver=sci_solver,
     symmetrize_spin=symmetrize_spin,
+    initial_occupancies=initial_occupancies,
     carryover_threshold=carryover_threshold,
     callback=callback,
     seed=12345,
 )
+ 
+final_energy = result.energy + nuclear_repulsion_energy
+energy_error = final_energy - reference_energy
+print(f"Final energy: {final_energy}")
+print(f"Final energy error: {energy_error}")
 #%%
 # states
 sci = result.sci_state
@@ -188,9 +223,6 @@ ham = ElectronicEnergy.from_raw_integrals(hcore, eri)
 
 mapper = JordanWignerMapper()
 Ham_spo = mapper.map(ham.second_q_op())
-#%%
-
-
 
 #%%
 from LiouvilleLanczos.Quantum_computer.sqd_lanczos import inner_product_spo_sqd

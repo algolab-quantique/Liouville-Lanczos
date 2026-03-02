@@ -33,7 +33,7 @@ def operator_average_value(f:SparsePauliOp, states:np.ndarray, coeffs:np.ndarray
     k_p = np.asarray(f.coeffs, dtype=complex)
 
     ij_mat = np.einsum('k,ijk,k,ik->ij', k_p, ijk_delta, k_phase_y, ik_eigenvalues)   # (N,N)
-    expval = np.einsum('i,j,ij', coeffs, coeffs, ij_mat)   
+    expval = np.einsum('i,j,ij', np.conj(coeffs), coeffs, ij_mat)   
 
     return complex(expval)
 
@@ -47,7 +47,6 @@ class inner_product_spo_sqd(Base_inner_product):
         self.coeffs = coeffs
         self.eps = epsilon
     def __call__(self, A:SparsePauliOp, B:SparsePauliOp, real_result=False, Name=None):
-
         Bc = B.adjoint()
         f = A@Bc+Bc@A
         f = relative_simplify_spo(f,self.eps)
