@@ -24,17 +24,10 @@ from qiskit_nature.second_q.transformers import ActiveSpaceTransformer
 #%%
 mapper = JordanWignerMapper()
 
-# ===== H2 molecule 4 qubits =====
-# num_qubits = 4
-# driver = PySCFDriver(atom='H .0 .0 .0; H .0 .0 0.74', basis='sto3g', spin=0, charge=0)
-# problem = driver.run()
-# ferm_ham = problem.hamiltonian.second_q_op()
-
-# ===== H2 molecule 8 qubits =====
-num_qubits = 8
-driver = PySCFDriver(atom='H .0 .0 .0; H .0 .0 0.74', basis='6-31g', spin=0, charge=0)
+num_qubits = 6
+driver = PySCFDriver(atom='Li 0.0 0.0 0.0; H 0.0 0.0 1.6', basis='sto3g', spin=0, charge=0)
 problem = driver.run()
-transformer = ActiveSpaceTransformer(num_electrons=2, num_spatial_orbitals=4)
+transformer = ActiveSpaceTransformer(num_electrons=4, num_spatial_orbitals=3)
 problem = transformer.transform(problem)
 ferm_ham = problem.hamiltonian.second_q_op()
 
@@ -60,13 +53,17 @@ HAM = mapper.map(ferm_ham)
 
 # matrice
 Hmat = HAM.to_matrix()
-E, S = np.linalg.eigh(Hmat)
+E, S = np.linalg.eigh(Hmat) 
 print("Ground state:", E[0])
 
 gs_coeffs = S[:,0]
 treshold = 1e-5
 mask = np.abs(gs_coeffs) > treshold
 print(f"Number of significant bitstrings in the ground state: {np.sum(mask)}")
+
+indices = np.where(mask)[0]
+bitstr = [format(i, f"0{num_qubits}b") for i in indices]
+print(bitstr)
 
 # %%
 gs_id = np.argmin(E)
@@ -97,22 +94,18 @@ qc = ansatz.assign_parameters(optimal_params)
 qc.measure_all()
 qc = transpile(qc, backend)
 sampler = Sampler(mode=backend)
-job = sampler.run([qc], shots=100000)
+
+job = sampler.run([qc], shots=1000)
 result = job.result()
 
-# === 4 qubits ===
-# job = service.job("d6jlejo60irc7394m6hg")
+# job = service.job("d6k92mm33pjc73dmv0u0")
 # result = job.result()
 
-# === 8 qubits ===
-# job = service.job("d6j51je33pjc73dlinbg")
-# result = job.result()
-
-counts = result[0].data.meas.get_counts()     
+counts = result[0].data.meas.get_counts()
 #%%
 bitstrings = list(counts.keys())
-# check nb de 1 et rejeter les états qui en ont pas 2
-bitstrings = [s for s in bitstrings if s.count('1') == 2]
+# check nb de 1 et rejeter les états qui en ont pas 4
+bitstrings = [s for s in bitstrings if s.count('1') == 4]
 bitstrings = list(set(bitstrings))
 states = np.array(
     [[int(b) for b in s] for s in bitstrings],
@@ -149,8 +142,7 @@ gs_energie = np.min(e).real
 coeffs = v[:, np.argmin(e)]
 print("Energy from sampled states:", gs_energie)
 print(len(bitstrings))
-#%% Classical green's function
-
+#%%
 start = time.perf_counter()
 matrix_lanczos = Lanczos(MatrixState_inner_product(sv.data),Matrix_Liouvillian(),Matrix_sum())
 a_ed,b_ed,mu_ed = matrix_lanczos.polynomial_hybrid(Hmat, C0_mat,[C2_mat],10)
@@ -172,7 +164,6 @@ for i in iterations_list:
     end = time.perf_counter()
     times.append(end - start)
     print(f"Iterations = {i} | Temps = {end - start:.6f} s")
-
 #%%
 import matplotlib.pyplot as plt
 w = np.linspace(-5.5,5.5,1000)-1e-1j
@@ -180,17 +171,9 @@ w = np.linspace(-5.5,5.5,1000)-1e-1j
 plt.plot(w,np.imag(green_ed(w)), label='Exact', color='blue')
 
 plt.plot(w,np.imag(green_sqd(w)),'--', label='SQD', color='red')
-# %%
-list1 = ['00010001',
-        '00010100',
-        '00100010',
-        '00101000', 
-        '01000001',
-        '01000100',
-        '10000010',
-        '10001000']
+#%%
+list1 = bitstr
 set2 = set(bitstrings)
 comparison = [b in set2 for b in list1]
 print(comparison)
-
 # %%

@@ -171,7 +171,7 @@ def H_tilde_from_bitstring(states, hub_spo):
     p = hub_spo.coeffs
     N, q = states.shape
     k = P.shape[0]
-
+ 
     b_iq = states[:, None, None, :]
     b_jq = states[None, :, None, :]
     P = P[None, None, :, :]
