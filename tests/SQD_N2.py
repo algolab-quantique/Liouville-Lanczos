@@ -1,6 +1,5 @@
 #%%
 import math
- 
 import ffsim
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,6 +11,7 @@ from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 from qiskit_ibm_runtime import QiskitRuntimeService
 from qiskit_ibm_runtime import SamplerV2 as Sampler
 from zigzag_layout import get_zigzag_physical_layout
+from qiskit_nature.second_q.operators import FermionicOp
 
 #%%
 # Specify molecule properties
@@ -104,9 +104,13 @@ isa_circuit = pass_manager.run(circuit)
 print(f"Gate counts (w/ pre-init passes): {isa_circuit.count_ops()}")
 #%%
 sampler = Sampler(mode=backend)
-job = sampler.run([isa_circuit], shots=100_000)
-primitive_result = job.result()
-pub_result = primitive_result[0]
+# job = sampler.run([isa_circuit], shots=100_000)
+# primitive_result = job.result()
+# pub_result = primitive_result[0]
+
+job = service.job("d6g7aaekeflc73ah3dfg")
+result = job.result()
+pub_result = result[0]
 
 #%%
 def is_valid_bitstring(
@@ -206,38 +210,67 @@ energy_error = final_energy - reference_energy
 print(f"Final energy: {final_energy}")
 print(f"Final energy error: {energy_error}")
 #%%
-# states
-sci = result.sci_state
-states = np.array(
-    [[int(b) for b in s] for s in sci.bitstrings],
-    dtype=str
+from qiskit_nature.second_q.hamiltonians import ElectronicEnergy
+from qiskit_nature.second_q.mappers import JordanWignerMapper
+q = 2*norb
+C0= FermionicOp(
+    {
+        "+_0": 1,
+    },
+    num_spin_orbitals=q,
 )
+C2= FermionicOp(
+    {
+        "+_2": 1,
+    },
+    num_spin_orbitals=q,
+)
+mapper = JordanWignerMapper()
+C0_spo = mapper.map(C0)
+C2_spo = mapper.map(C2)
+
+# states
+def sci_states_from_amplitudes(sci_state):
+    norb = sci_state.norb
+    states = []
+
+    for i, a in enumerate(sci_state.ci_strs_a):
+        for j, b in enumerate(sci_state.ci_strs_b):
+            if abs(sci_state.amplitudes[i, j]) > 1e-12:
+                a_bits = format(a, f"0{norb}b")
+                b_bits = format(b, f"0{norb}b")
+                states.append([int(x) for x in a_bits + b_bits])
+
+    return np.array(states)
+states = sci_states_from_amplitudes(result.sci_state)
+
 # coeffs
 coeffs = result.sci_state.amplitudes
 coeffs = np.array(coeffs)
 # hamiltonian
-from qiskit_nature.second_q.hamiltonians import ElectronicEnergy
-from qiskit_nature.second_q.mappers import JordanWignerMapper
-
 ham = ElectronicEnergy.from_raw_integrals(hcore, eri)
 
 mapper = JordanWignerMapper()
 Ham_spo = mapper.map(ham.second_q_op())
 
 #%%
-from LiouvilleLanczos.Quantum_computer.sqd_lanczos import inner_product_spo_sqd
+from LiouvilleLanczos.Quantum_computer.sqd_lanczos import SampledSubspaceProjector
 from LiouvilleLanczos.Quantum_computer.QC_lanczos import Liouvillian_spo, sum_spo
 from LiouvilleLanczos.Lanczos import Lanczos
 from LiouvilleLanczos.Green import CF_Green
 
+#%%
 eps = 1e-3
-avg_op = inner_product_spo_sqd(states,coeffs,eps)
+eval = SampledSubspaceProjector(states, coeffs, eps)
+avg_op = eval.inner_product_sqd()
 SQ_Liou_avg = Liouvillian_spo(eps)
 lanczos_avg = Lanczos(avg_op,SQ_Liou_avg,sum_spo(eps))
-a_avg,b_avg,mu_avg = lanczos_avg.polynomial_hybrid(Ham_spo, C0_spo,[C1_spo,C2_spo,C3_spo],10,5e-3)
+a_avg,b_avg,mu_avg = lanczos_avg.polynomial_hybrid(Ham_spo, C0_spo,[C2_spo],2)
 green_sqd = CF_Green(a_avg,b_avg)
 #%%
 import matplotlib.pyplot as plt
 w = np.linspace(-5.5,5.5,1000)-1e-1j
 
 plt.plot(w,np.imag(green_sqd(w)), label='SQD', color='red')
+# %%
+ 

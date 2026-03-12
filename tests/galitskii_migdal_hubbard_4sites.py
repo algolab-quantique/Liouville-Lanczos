@@ -60,8 +60,8 @@ def make_green_stack(opset_list=['0-123', '1-2'], max_iter=10, n=4, u=4, mu=None
         if stacked_green is None:
             stacked_green = green_list
         else:
-            stacked_green = np.hstack([stacked_green, green_list])
-    return stacked_green
+            stacked_green = np.hstack([stacked_green, green_list]) # si ça converge plus vite que le critere on a un probleme
+    return stacked_green # 6 Green par 30it
 
 def annihilation_operators(n):
     c_fermi_list = [FermionicOp({f"-_{i}": 1}, num_spin_orbitals=2 * n) for i in range(n)]
@@ -105,26 +105,18 @@ def make_green_list(a, b, mm, min_iter=1):
             green_list[k - 1, m + 1] = PolyLehmann_Green(a[:k], b[:k], mm[:k, m], green0)
     return green_list
 
-
 true_stack_green = make_green_stack(['0-123', '1-2'], 31, n, u, backend='exact', eps=1e-17)
+#%%
+from scipy.sparse import csr_array
+from typing import Callable
+from LiouvilleLanczos.Green import integrable_Green_function_base
 
 
+def fermi(w):
+    return w <= 0.0
 
-def galitskii_migdal_energy(green, h0,geo="line"):
-    n = len(h0)
-    num_iterations = len(green)
-    energy = []
-    for k in range(0, num_iterations):
-        green_list = [g for g in green[k, :]]
-        mapping_line = green_mapping_line(n)
-        
-
-        g = Green_matrix(green_list, n, mapping_line)
-        Kq = g.integrate_scalarfreq(lambda x: fermi(x), h0)  # for one spin
-        wG = g.integrate_scalarfreq(lambda x: x * fermi(x), np.eye(n))
-        energy.append((wG + Kq).real)  # /2 missing because spin degeneracy
-    return energy
-
+green = true_stack_green
+h0 = h_0
 
 def green_mapping_line(n):
     green_mapping = []
@@ -140,13 +132,52 @@ def green_mapping_line(n):
 
     return green_mapping
 
+# Galitskii_Migdal_energy
+n = len(h0)
+num_iterations = len(green)
+energy = []
+for k in range(0, num_iterations):
+    green_list = [g for g in green[k, :]]
+    mapping_line = green_mapping_line(n)
+    
+    # prepare_position_maps
+    def convert_matpos(mat_pos):
+            r,c,k = mat_pos
+            assert r < n
+            assert c < n
+            assert k < len(green_list)
+            return r+c*n,k
+    R,C,D = np.zeros(len(mapping_line),dtype=np.int64),np.zeros(len(mapping_line),dtype=np.int64),np.zeros(len(mapping_line),dtype=np.complex128)
+    for i,(il,jl,kl,coeff) in enumerate(mapping_line):
+        R[i],C[i] = convert_matpos((il,jl,kl))
+        D[i] = coeff
+    position_maps = csr_array((D,(R,C)) ,shape=(n**2,len(green_list))) # (16, 6)
 
-def fermi(w):
-    return w <= 0.0
+    scalar_frequency_weights_function = lambda x: fermi(x)
+    matrix_frequency_constant = h0       
+    GI = np.zeros(len(green_list))
+    for i,g in enumerate(green_list):
+        if not hasattr(g, "integrate"):
+            g = g.to_Lehmann()
+        GI[i] = g.integrate(scalar_frequency_weights_function)
+    fm = matrix_frequency_constant.flatten()
+    Kq = fm@position_maps@GI
 
+    scalar_frequency_weights_function = lambda x: x * fermi(x)
+    matrix_frequency_constant = np.eye(n)
+    GI = np.zeros(len(green_list))
+    for i,g in enumerate(green_list):
+        if not hasattr(g, "integrate"):
+            g = g.to_Lehmann()
+        GI[i] = g.integrate(scalar_frequency_weights_function)
+    fm = matrix_frequency_constant.flatten()
+    wG = fm@position_maps@GI
+    
+    energy.append((wG + Kq).real)  # /2 missing because spin degeneracy
 
-true_gm_energy = galitskii_migdal_energy(true_stack_green, h_0)
+true_gm_energy = energy
 
 plt.plot(true_gm_energy)
 
 # %%
+green_mapping_line(4)

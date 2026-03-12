@@ -24,12 +24,16 @@ from qiskit_nature.second_q.transformers import ActiveSpaceTransformer
 #%%
 mapper = JordanWignerMapper()
 
-num_qubits = 6
-driver = PySCFDriver(atom='Li 0.0 0.0 0.0; H 0.0 0.0 1.6', basis='sto3g', spin=0, charge=0)
+
+driver = PySCFDriver(atom='Li 0.0 0.0 0.0; H 0.0 0.0 1.6', basis='sto-3g', spin=0, charge=0)
 problem = driver.run()
-transformer = ActiveSpaceTransformer(num_electrons=4, num_spatial_orbitals=3)
+transformer = ActiveSpaceTransformer(num_electrons=4, num_spatial_orbitals=2)
 problem = transformer.transform(problem)
 ferm_ham = problem.hamiltonian.second_q_op()
+
+# mapping JW
+HAM = mapper.map(ferm_ham)
+num_qubits = HAM.num_qubits
 
 C0= FermionicOp(
     {
@@ -43,14 +47,10 @@ C2= FermionicOp(
     },
     num_spin_orbitals=num_qubits,
 )
-
 C0_spo = mapper.map(C0)
 C2_spo = mapper.map(C2)
 C0_mat = C0_spo.to_matrix()
 C2_mat = C2_spo.to_matrix()
-# mapping JW
-HAM = mapper.map(ferm_ham)
-
 # matrice
 Hmat = HAM.to_matrix()
 E, S = np.linalg.eigh(Hmat) 
@@ -161,7 +161,7 @@ for i in iterations_list:
     lanczos_avg = Lanczos(avg_op,SQ_Liou_avg,sum_spo(eps))
     a_avg,b_avg,mu_avg = lanczos_avg.polynomial_hybrid(HAM, C0_spo,[C2_spo],i)
     green_sqd = CF_Green(a_avg,b_avg)
-    end = time.perf_counter()
+    end = time.perf_counter()                                                                                                                                                             
     times.append(end - start)
     print(f"Iterations = {i} | Temps = {end - start:.6f} s")
 #%%
@@ -176,4 +176,8 @@ list1 = bitstr
 set2 = set(bitstrings)
 comparison = [b in set2 for b in list1]
 print(comparison)
+# %%
+ham = problem.hamiltonian
+hcore = ham.electronic_integrals.one_body.alpha.to_dense()
+print(hcore)
 # %%
