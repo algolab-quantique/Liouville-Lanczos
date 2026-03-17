@@ -10,16 +10,12 @@ from qiskit.circuit.library import real_amplitudes
 from qiskit_algorithms.optimizers import COBYLA
 from qiskit_algorithms import VQE
 from qiskit import QuantumCircuit, transpile
-from LiouvilleLanczos.Quantum_computer.QC_lanczos import Liouvillian_spo, inner_product_spo, sum_spo
+from LiouvilleLanczos.Quantum_computer.QC_lanczos import Liouvillian_spo, sum_spo
 from LiouvilleLanczos.Quantum_computer.sqd_lanczos import SampledSubspaceProjector
 from LiouvilleLanczos.Lanczos import Lanczos
 from LiouvilleLanczos.matrix_impl import MatrixState_inner_product,Matrix_Liouvillian,Matrix_sum
 from LiouvilleLanczos.Green import CF_Green
 import time
-import pyscf
-import pyscf.cc
-import pyscf.mcscf
-from qiskit_nature.second_q.drivers import ElectronicStructureDriver
 from qiskit_nature.second_q.transformers import ActiveSpaceTransformer
 #%%
 mapper = JordanWignerMapper()
@@ -73,7 +69,7 @@ gs_id = np.argmin(E)
 sv = Statevector(S[:,gs_id])
 #%%
 # Sample states on quantum computer
-from qiskit_ibm_runtime import QiskitRuntimeService, EstimatorV2
+from qiskit_ibm_runtime import QiskitRuntimeService
 from qiskit_ibm_runtime import SamplerV2 as Sampler
 
 service = QiskitRuntimeService()

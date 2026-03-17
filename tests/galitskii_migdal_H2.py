@@ -1,55 +1,51 @@
 # %%
-from math import ceil
 
 import numpy as np
 import matplotlib.pyplot as plt
 from qiskit_nature.second_q.operators import FermionicOp
 from qiskit_nature.second_q.mappers import JordanWignerMapper
+from qiskit_nature.second_q.drivers import PySCFDriver
+
 
 MAPPER = JordanWignerMapper()
 
-
-def hubbard(hop=np.array([[0, 1], [1, 0]]), u=4, mu=None):
-    n = len(hop)
-    if mu is None:
-        mu = u / 2
-    hopping = FermionicOp(
-        {
-            f"+_{i+m} -_{j+m}": hop[i, j]
-            for m in [0, n]
-            for i in range(n)
-            for j in range(n)
-            if hop[i, j] != 0
-        },
-        num_spin_orbitals=2 * n,
-    )
-    occupation = FermionicOp(
-        {f"+_{i} -_{i}": 1 for i in range(2 * n)}, num_spin_orbitals=2 * n
-    )
-    interaction = FermionicOp(
-        {f"+_{i} +_{i+n} -_{i+n} -_{i}": 1 for i in range(n)}, num_spin_orbitals=2 * n
-    )
-    return MAPPER.map(-hopping + u * interaction - mu * occupation)
-
-
-n = 3
+n = 4
 u = 4
-mu = None
-max_iter = None
+driver = PySCFDriver(atom="H .0 .0 .0; H .0 .0 0.74", basis="sto3g", spin=0, charge=0)
+problem = driver.run()
+ferm_ham = problem.hamiltonian.second_q_op()
 
-hopping = np.diag(np.ones(n - 1), 1) + np.diag(np.ones(n - 1), -1)
-hamiltonian = hubbard(hopping, u)
-h_mu = (u / 2) * np.diag(np.ones(n))
-h_0 = -hopping - h_mu
-eigvals, eigvecs = np.linalg.eigh(hamiltonian.to_matrix())
-true_gs_energy = eigvals[0]
-true_gs_vector = eigvecs[:, 0]
+C0 = FermionicOp(
+    {
+        "+_0": 1,
+    },
+    num_spin_orbitals=n,
+)
+C2 = FermionicOp(
+    {
+        "+_2": 1,
+    },
+    num_spin_orbitals=n,
+)
 
+C0_spo = MAPPER.map(C0)
+C2_spo = MAPPER.map(C2)
+C0_mat = C0_spo.to_matrix()
+C2_mat = C2_spo.to_matrix()
+# mapping JW
+hamiltonian = MAPPER.map(ferm_ham)
+
+# matrice
+Hmat = hamiltonian.to_matrix()
+E, S = np.linalg.eigh(Hmat)
+HAM = problem.hamiltonian
+h0 = HAM.electronic_integrals.one_body.alpha.to_dense()
+true_gs_energy = E[0]
+true_gs_vector = S[:, 0]
 
 # %%
-
 from LiouvilleLanczos.Lanczos import Lanczos
-from LiouvilleLanczos.Green import CF_Green, PolyLehmann_Green, Green_matrix
+from LiouvilleLanczos.Green import CF_Green, PolyLehmann_Green
 from LiouvilleLanczos.matrix_impl import (
     MatrixState_inner_product,
     Matrix_Liouvillian,
@@ -154,12 +150,11 @@ def make_green_list(a, b, mm, min_iter=1):
 
 
 true_stack_green = make_green_stack(
-    ["0-12", "1-"], 31, n, u, backend="exact", eps=1e-17
+    ["0-123", "1-2"], 31, n, u, backend="exact", eps=1e-17
 )
+
 # %%
 from scipy.sparse import csr_array
-from typing import Callable
-from LiouvilleLanczos.Green import integrable_Green_function_base
 
 
 def fermi(w):
@@ -167,7 +162,6 @@ def fermi(w):
 
 
 green = true_stack_green
-h0 = h_0
 
 
 # Hardcode Green mapping lines for 2-3-4-5 sites
@@ -241,6 +235,19 @@ def green_mapping_line(n):
     return green_mapping
 
 
+green_mapping_3sites = [
+    (0, 0, 0, 1),
+    (0, 1, 1, 1),
+    (0, 2, 2, 1),
+    (1, 0, 4, 1),
+    (1, 1, 3, 1),
+    (1, 2, 5, 1),
+    (2, 0, 7, 1),
+    (2, 1, 8, 1),
+    (2, 2, 6, 1),
+]
+
+
 # Galitskii_Migdal_energy
 n = len(h0)
 num_iterations = len(green)
@@ -304,7 +311,7 @@ imag = np.full_like(omega, E)
 plt.figure()
 
 plt.plot(real, imag, label="Energy line", color="red")
-plt.plot(true_gm_energy, color="blue")
+plt.plot(true_gm_energy, "--", color="blue")
 plt.grid()
 
 plt.legend()
