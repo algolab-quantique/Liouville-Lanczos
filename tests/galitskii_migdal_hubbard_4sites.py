@@ -34,16 +34,18 @@ def hubbard(hop=np.array([[0, 1], [1, 0]]), u=4, mu=None):
 
 n = 3
 u = 4
-mu = None
+mu = u / 2 + 0.01
 max_iter = None
 
 hopping = np.diag(np.ones(n - 1), 1) + np.diag(np.ones(n - 1), -1)
-hamiltonian = hubbard(hopping, u)
-h_mu = (u / 2) * np.diag(np.ones(n))
+hopping = np.array([[0, 1, 0], [1, 0, 1.1], [0, 1.1, 0]])
+hamiltonian = hubbard(hopping, u, mu=mu)
+h_mu = (mu) * np.diag(np.ones(n))
 h_0 = -hopping - h_mu
 eigvals, eigvecs = np.linalg.eigh(hamiltonian.to_matrix())
 true_gs_energy = eigvals[0]
 true_gs_vector = eigvecs[:, 0]
+print(eigvals)
 
 
 # %%
@@ -154,7 +156,7 @@ def make_green_list(a, b, mm, min_iter=1):
 
 
 true_stack_green = make_green_stack(
-    ["0-12", "1-"], 31, n, u, backend="exact", eps=1e-17
+    ["0-12", "1-02", "2-01"], 31, n, u, backend="exact", eps=1e-17
 )
 # %%
 from scipy.sparse import csr_array
@@ -241,13 +243,26 @@ def green_mapping_line(n):
     return green_mapping
 
 
+green_mapping_full = [
+    (0, 0, 0, 1),
+    (0, 1, 1, 1),
+    (0, 2, 2, 1),
+    (1, 0, 4, 1),
+    (1, 1, 3, 1),
+    (1, 2, 5, 1),
+    (2, 0, 7, 1),
+    (2, 1, 8, 1),
+    (2, 2, 6, 1),
+]
+
+
 # Galitskii_Migdal_energy
 n = len(h0)
 num_iterations = len(green)
 energy = []
 for k in range(0, num_iterations):
     green_list = [g for g in green[k, :]]
-    mapping_line = green_mapping_line(n)
+    mapping_line = green_mapping_full
 
     # prepare_position_maps
     def convert_matpos(mat_pos):
