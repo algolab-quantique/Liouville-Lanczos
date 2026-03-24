@@ -1,11 +1,32 @@
-#%%
-from LiouvilleLanczos.Quantum_computer.QC_lanczos import Liouvillian_slo,inner_product_slo,sum_slo, Liouvillian_spo, inner_product_spo, sum_spo
-from LiouvilleLanczos.Quantum_computer.Hamiltonian import Line_Hubbard,BoundaryCondition
+# %%
+from LiouvilleLanczos.Quantum_computer.QC_lanczos import (
+    Liouvillian_slo,
+    inner_product_slo,
+    sum_slo,
+    Liouvillian_spo,
+    inner_product_spo,
+    sum_spo,
+)
+from LiouvilleLanczos.Quantum_computer.Hamiltonian import (
+    Line_Hubbard,
+    BoundaryCondition,
+)
 from LiouvilleLanczos.Quantum_computer.sqd_lanczos import inner_product_spo_sqd
 from LiouvilleLanczos.Lanczos import Lanczos
-from LiouvilleLanczos.matrix_impl import MatrixState_inner_product,Matrix_Liouvillian,Matrix_sum
+from LiouvilleLanczos.matrix_impl import (
+    MatrixState_inner_product,
+    Matrix_Liouvillian,
+    Matrix_sum,
+)
+
 # from LiouvilleLanczos.Quantum_computer.Mapping import find_best_layout
-from LiouvilleLanczos.Green import CF_Green,Green_matrix,Lehmann_Green,PolyCF_Green,PolyLehmann_Green
+from LiouvilleLanczos.Green import (
+    CF_Green,
+    Green_matrix,
+    Lehmann_Green,
+    PolyCF_Green,
+    PolyLehmann_Green,
+)
 from qiskit.primitives import StatevectorEstimator as pEstimator
 from qiskit_nature.second_q.mappers import JordanWignerMapper
 from qiskit_nature.second_q.operators import FermionicOp
@@ -17,18 +38,18 @@ from qiskit import transpile
 from datetime import datetime
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 
-#%% problem hamiltonian and other operators setup.
+# %% problem hamiltonian and other operators setup.
 U = 4
 mapper = JordanWignerMapper()
-Ham = Line_Hubbard(-1,U/2,U,2,boundary_condition=BoundaryCondition.OPEN)
-#up spin site 1
+Ham = Line_Hubbard(-1, U / 2, U, 2, boundary_condition=BoundaryCondition.OPEN)
+# up spin site 1
 C2 = FermionicOp(
     {
         "+_2": 1,
     },
     num_spin_orbitals=4,
 )
-#up spin site 0
+# up spin site 0
 C0 = FermionicOp(
     {
         "+_0": 1,
@@ -39,33 +60,35 @@ C0_mat = mapper.map(C0).to_matrix()
 C2_mat = mapper.map(C2).to_matrix()
 C0_spo = mapper.map(C0)
 C2_spo = mapper.map(C2)
-#%% Ground state circuit, obtained by inspection of analytical wavefunction
+# %% Ground state circuit, obtained by inspection of analytical wavefunction
 bt = 0.7854074074074073
 GS_analytical = QuantumCircuit(4)
 GS_analytical.h(0)
 GS_analytical.x(1)
-GS_analytical.cx(0,1)
-GS_analytical.ry(bt,2)
+GS_analytical.cx(0, 1)
+GS_analytical.ry(bt, 2)
 GS_analytical.x(3)
-GS_analytical.cx(2,3)
-GS_analytical.cx(1,3)
-GS_analytical.cx(1,2)
-GS_analytical.cz(1,2)
-GS_analytical.swap(1,2)
+GS_analytical.cx(2, 3)
+GS_analytical.cx(1, 3)
+GS_analytical.cx(1, 2)
+GS_analytical.cz(1, 2)
+GS_analytical.swap(1, 2)
 
-#%% Sanity check: compare matrix ground energy with simulated estimator ground energy.
+# %% Sanity check: compare matrix ground energy with simulated estimator ground energy.
 Hmat = mapper.map(Ham).to_matrix()
 estimator = pEstimator()
-qubit_converter = (JordanWignerMapper())
+qubit_converter = JordanWignerMapper()
 HHam = qubit_converter.map(Ham)
-E,S = np.linalg.eigh(Hmat)
-GS_mat = S[:,0]
+E, S = np.linalg.eigh(Hmat)
+GS_mat = S[:, 0]
 print(E[0])
-print(estimator.run([(GS_analytical,HHam)]).result()[0].data.evs)
-#%% classical computation of the Green's function at site 0
-matrix_lanczos = Lanczos(MatrixState_inner_product(GS_mat),Matrix_Liouvillian(),Matrix_sum())
-a_ed,b_ed,mu_ed = matrix_lanczos.polynomial_hybrid(Hmat,C0_mat,[C2_mat],10)
-green_ed = CF_Green(a_ed,b_ed)
+print(estimator.run([(GS_analytical, HHam)]).result()[0].data.evs)
+# %% classical computation of the Green's function at site 0
+matrix_lanczos = Lanczos(
+    MatrixState_inner_product(GS_mat), Matrix_Liouvillian(), Matrix_sum()
+)
+a_ed, b_ed, mu_ed = matrix_lanczos.polynomial_hybrid(Hmat, C0_mat, [C2_mat], 10)
+green_ed = CF_Green(a_ed, b_ed)
 # %% Quantum computer simulation
 # eps = 1e-6
 # SQ_inpro = inner_product_spo(GS_analytical,estimator,eps)
@@ -80,23 +103,24 @@ statevector = qiskit.quantum_info.Statevector.from_instruction(GS_analytical)
 n = statevector.num_qubits
 coeffs = statevector.data.copy()
 idx = np.arange(2**n)
-states = np.array([list(format(i,f'0{n}b')) for i in idx],dtype=str)
-avg_op = inner_product_spo_sqd(states,coeffs,eps)
+states = np.array([list(format(i, f"0{n}b")) for i in idx], dtype=str)
+avg_op = inner_product_spo_sqd(states, coeffs, eps)
 SQ_Liou_avg = Liouvillian_spo(eps)
-lanczos_avg = Lanczos(avg_op,SQ_Liou_avg,sum_spo(eps))
-a_avg,b_avg,mu_avg = lanczos_avg.polynomial_hybrid(HHam,C0_spo,[C2_spo],10,5e-3)
-green_oli = CF_Green(a_avg,b_avg)
+lanczos_avg = Lanczos(avg_op, SQ_Liou_avg, sum_spo(eps))
+a_avg, b_avg, mu_avg = lanczos_avg.polynomial_hybrid(HHam, C0_spo, [C2_spo], 10, 5e-3)
+green_sqd = CF_Green(a_avg, b_avg)
 
-#%% We observe that the result are coherent.
+# %% We observe that the result are coherent.
 import matplotlib.pyplot as plt
-w = np.linspace(-5.5,5.5,1000)-1e-1j
+
+w = np.linspace(-5.5, 5.5, 1000) - 1e-1j
 #
 # plt.plot(w,np.imag(green_sim(w)))
 # # plt.savefig("hubu4mu2.pdf")
-plt.plot(w,np.imag(green_ed(w)))
+plt.plot(w, np.imag(green_ed(w)))
 
-plt.plot(w,np.imag(green_oli(w)),'--')
-#%%
+plt.plot(w, np.imag(green_sqd(w)), "--")
+# %%
 # from qiskit_ibm_runtime import (
 #     Session,
 #     Sampler,
@@ -111,13 +135,13 @@ plt.plot(w,np.imag(green_oli(w)),'--')
 #     ResilienceOptions,
 #     TranspilationOptions,
 #     EstimatorOptions
-    
+
 # )
 
 # #<First time only>
 # #QiskitRuntimeService.save_account(channel="ibm_quantum", token="IBM_TOKEN")
 # #<\First time only>
-# #If you want to reproduce my result you will have to modify this to your own provider, 
+# #If you want to reproduce my result you will have to modify this to your own provider,
 # # you may not have access to the same hardware, it might even not be in service anymore.
 # service_algolab = QiskitRuntimeService(
 #     channel="ibm_quantum",
@@ -173,7 +197,7 @@ plt.plot(w,np.imag(green_oli(w)),'--')
 # with open(f"V2_QC_hubbard2site_data_{bkd}_{hour}_{min}_{sec}.py",'w') as txt_file:
 #     txt_file.write(f"#executed on {now} \n")
 #     txt_file.write(f"#resilience level: {estim_options.resilience_level} \n")
-#     txt_file.write(f"#Dynamical decoupling: {estim_options.dynamical_decoupling.enable}, sequence: {estim_options.dynamical_decoupling.sequence_type} \n")    
+#     txt_file.write(f"#Dynamical decoupling: {estim_options.dynamical_decoupling.enable}, sequence: {estim_options.dynamical_decoupling.sequence_type} \n")
 #     txt_file.write(f"#total execution time, with wait :{datetime.now()-now}\n")
 #     txt_file.write(f"#GS energy result = {E}\n")
 #     txt_file.write(f'"""\n {estim.options} \n"""\n')

@@ -1,37 +1,21 @@
 # %%
-
+# ===== System =====
 import numpy as np
 import matplotlib.pyplot as plt
 from qiskit_nature.second_q.operators import FermionicOp
 from qiskit_nature.second_q.mappers import JordanWignerMapper
 from qiskit_nature.second_q.drivers import PySCFDriver
+import warnings
 
+warnings.filterwarnings("ignore")
 
 MAPPER = JordanWignerMapper()
 
-n = 4
-u = 4
+n = 2
 driver = PySCFDriver(atom="H .0 .0 .0; H .0 .0 0.74", basis="sto3g", spin=0, charge=0)
 problem = driver.run()
 ferm_ham = problem.hamiltonian.second_q_op()
 
-C0 = FermionicOp(
-    {
-        "+_0": 1,
-    },
-    num_spin_orbitals=n,
-)
-C2 = FermionicOp(
-    {
-        "+_2": 1,
-    },
-    num_spin_orbitals=n,
-)
-
-C0_spo = MAPPER.map(C0)
-C2_spo = MAPPER.map(C2)
-C0_mat = C0_spo.to_matrix()
-C2_mat = C2_spo.to_matrix()
 # mapping JW
 hamiltonian = MAPPER.map(ferm_ham)
 
@@ -39,11 +23,35 @@ hamiltonian = MAPPER.map(ferm_ham)
 Hmat = hamiltonian.to_matrix()
 E, S = np.linalg.eigh(Hmat)
 HAM = problem.hamiltonian
-h0 = HAM.electronic_integrals.one_body.alpha.to_dense()
+h0_tensor = HAM.electronic_integrals.one_body.alpha.to_dense()
+h0 = h0_tensor["+-"]
+h0 = np.array(h0)
 true_gs_energy = E[0]
 true_gs_vector = S[:, 0]
 
 # %%
+# ===== SQD =====
+from qiskit.quantum_info import Statevector
+from LiouvilleLanczos.Quantum_computer.sqd_lanczos import SampledSubspaceProjector
+
+gs_id = np.argmin(E)
+sv = Statevector(S[:, gs_id])
+sv.seed(42)
+shots = 1000
+samples = sv.sample_counts(shots)
+bitstrings = list(samples.keys())
+states = np.array([[int(b) for b in s] for s in bitstrings], dtype=int)
+print(states)
+
+eval = SampledSubspaceProjector(states)
+H_tilde = eval.H_tilde_matrix(hamiltonian)
+e, v = np.linalg.eig(H_tilde)
+gs_energie = np.min(e).real
+coeffs = v[:, np.argmin(e)]
+print("Energy from sampled states:", gs_energie)
+
+# %%
+# ===== Liouville-Lanczos =====
 from LiouvilleLanczos.Lanczos import Lanczos
 from LiouvilleLanczos.Green import CF_Green, PolyLehmann_Green
 from LiouvilleLanczos.matrix_impl import (
@@ -51,6 +59,9 @@ from LiouvilleLanczos.matrix_impl import (
     Matrix_Liouvillian,
     Matrix_sum,
 )
+from LiouvilleLanczos.Quantum_computer.QC_lanczos import Liouvillian_spo, sum_spo
+from LiouvilleLanczos.Lanczos import Lanczos
+from LiouvilleLanczos.Green import CF_Green, PolyLehmann_Green
 
 
 def make_green_stack(
@@ -128,6 +139,20 @@ def get_abmu(
             max_iter,
         )
         return a, b, mm
+    if backend == "sqd":
+
+        eval = SampledSubspaceProjector(states, coeffs, eps)
+        avg_op = eval.inner_product_sqd
+        SQ_Liou_avg = Liouvillian_spo(eps)
+        lanczos = Lanczos(avg_op, SQ_Liou_avg, sum_spo(eps))
+
+        a, b, mm = lanczos.polynomial_hybrid(
+            hamiltonian,
+            main_op,
+            [o for o in other_ops],
+            max_iter,
+        )
+        return a, b, mm
 
 
 def make_green_list(a, b, mm, min_iter=1):
@@ -149,11 +174,55 @@ def make_green_list(a, b, mm, min_iter=1):
     return green_list
 
 
-true_stack_green = make_green_stack(
-    ["0-123", "1-2"], 31, n, u, backend="exact", eps=1e-17
+true_stack_green = make_green_stack(["0-1", "1-0"], 31, n, backend="exact", eps=1e-17)
+sqd_stack_green = make_green_stack(["0-1", "1-0"], 31, n, backend="sqd", eps=1e-17)
+# %%
+# ===== Plot Green fonction =====
+green_ed = true_stack_green[0][0]
+green_sqd = sqd_stack_green[0][0]
+
+w = np.linspace(-5.5, 5.5, 1000) - 1e-1j
+w_real = np.real(w)
+
+fig, ax = plt.subplots(figsize=(8, 5))
+
+ax.plot(
+    w_real,
+    np.imag(green_ed(w)),
+    color="steelblue",
+    linewidth=1.8,
+    label=r"Exact diagonalization",
 )
 
+ax.plot(
+    w_real,
+    np.imag(green_sqd(w)),
+    color="firebrick",
+    linewidth=1.5,
+    linestyle="--",
+    label=r"SQD approximation",
+)
+
+ax.set_xlabel(r"Frequency ($\omega$)", fontsize=13)
+ax.set_ylabel(r"$\mathrm{Im}\, G_{00}(\omega)$", fontsize=13)
+ax.set_title("Green Function — Exact vs SQD", fontsize=14, fontweight="bold")
+
+
+ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
+ax.set_axisbelow(True)
+
+
+ax.legend(fontsize=11, framealpha=0.9)
+
+
+ax.margins(x=0.02)
+
+fig.tight_layout()
+# plt.savefig("green_function_comparison.pdf", dpi=300, bbox_inches="tight")
+plt.show()
+
 # %%
+# ===== Galistkii-Migdal =====
 from scipy.sparse import csr_array
 
 
@@ -161,92 +230,15 @@ def fermi(w):
     return w <= 0.0
 
 
-green = true_stack_green
+green = sqd_stack_green
 
 
-# Hardcode Green mapping lines for 2-3-4-5 sites
-def green_mapping_line(n):
-    if n == 2:
-        green_mapping = [  # 0-1
-            (0, 0, 0, 1),
-            (1, 1, 0, 1),
-            (0, 1, 1, 1),
-            (1, 0, 1, 1),
-        ]
-    if n == 3:
-        green_mapping = [  # 0-12 1    (4 Green)
-            (0, 0, 0, 1),
-            (2, 2, 0, 1),
-            (0, 1, 1, 1),
-            (1, 0, 1, 1),
-            (1, 2, 1, 1),
-            (2, 1, 1, 1),
-            (0, 2, 2, 1),
-            (2, 0, 2, 1),
-            (1, 1, 3, 1),
-        ]
-    if n == 4:
-        green_mapping = [  # 0-123 1-2 (6 Green)
-            (0, 0, 0, 1),
-            (3, 3, 0, 1),
-            (0, 1, 1, 1),
-            (2, 3, 1, 1),
-            (3, 2, 1, 1),
-            (1, 0, 1, 1),
-            (0, 2, 2, 1),
-            (1, 3, 2, 1),
-            (3, 1, 2, 1),
-            (2, 0, 2, 1),
-            (0, 3, 3, 1),
-            (3, 0, 3, 1),
-            (1, 1, 4, 1),
-            (2, 2, 4, 1),
-            (1, 2, 5, 1),
-            (2, 1, 5, 1),
-        ]
-    if n == 5:
-        green_mapping = [  # 0-1234 1-23 2 (9 Green)
-            (0, 0, 0, 1),
-            (4, 4, 0, 1),
-            (0, 1, 1, 1),
-            (0, 1, 1, 1),
-            (3, 4, 1, 1),
-            (4, 3, 1, 1),
-            (0, 2, 2, 1),
-            (2, 0, 2, 1),
-            (2, 4, 2, 1),
-            (4, 2, 2, 1),
-            (0, 3, 3, 1),
-            (3, 0, 3, 1),
-            (1, 4, 3, 1),
-            (4, 1, 3, 1),
-            (0, 4, 4, 1),
-            (4, 0, 4, 1),
-            (1, 1, 5, 1),
-            (3, 3, 5, 1),
-            (1, 2, 6, 1),
-            (2, 1, 6, 1),
-            (2, 3, 6, 1),
-            (3, 2, 6, 1),
-            (1, 3, 7, 1),
-            (3, 1, 7, 1),
-            (2, 2, 8, 1),
-        ]
-    return green_mapping
-
-
-green_mapping_3sites = [
+green_mapping_h2 = [
     (0, 0, 0, 1),
     (0, 1, 1, 1),
-    (0, 2, 2, 1),
-    (1, 0, 4, 1),
-    (1, 1, 3, 1),
-    (1, 2, 5, 1),
-    (2, 0, 7, 1),
-    (2, 1, 8, 1),
-    (2, 2, 6, 1),
+    (1, 0, 3, 1),
+    (1, 1, 2, 1),
 ]
-
 
 # Galitskii_Migdal_energy
 n = len(h0)
@@ -254,7 +246,7 @@ num_iterations = len(green)
 energy = []
 for k in range(0, num_iterations):
     green_list = [g for g in green[k, :]]
-    mapping_line = green_mapping_line(n)
+    mapping_line = green_mapping_h2
 
     # prepare_position_maps
     def convert_matpos(mat_pos):
@@ -272,7 +264,7 @@ for k in range(0, num_iterations):
     for i, (il, jl, kl, coeff) in enumerate(mapping_line):
         R[i], C[i] = convert_matpos((il, jl, kl))
         D[i] = coeff
-    position_maps = csr_array((D, (R, C)), shape=(n**2, len(green_list)))  # (16, 6)
+    position_maps = csr_array((D, (R, C)), shape=(n**2, len(green_list)))
 
     scalar_frequency_weights_function = lambda x: fermi(x)
     matrix_frequency_constant = h0
@@ -298,23 +290,45 @@ for k in range(0, num_iterations):
 
 true_gm_energy = energy
 
-plt.plot(true_gm_energy)
 
 # %%
-E = true_gs_energy
+# ===== Plot G-M =====
+iterations = np.arange(len(true_gm_energy))
 
-omega = np.linspace(0, 31, 200)
+fig, ax = plt.subplots(figsize=(8, 5))
 
-real = omega
-imag = np.full_like(omega, E)
+ax.plot(
+    iterations,
+    true_gm_energy,
+    color="steelblue",
+    linewidth=1.8,
+    marker="o",
+    markersize=4,
+    label=r"Computed energy $E_{\mathrm{SQD}}$",
+)
 
-plt.figure()
+ax.axhline(
+    y=true_gs_energy,
+    color="firebrick",
+    linewidth=1.5,
+    linestyle="--",
+    label=r"Exact ground state $E_0 = $" + f"{true_gs_energy:.4f} Ha",
+)
 
-plt.plot(real, imag, label="Energy line", color="red")
-plt.plot(true_gm_energy, "--", color="blue")
-plt.grid()
+ax.set_xlabel("Iteration", fontsize=13)
+ax.set_ylabel("Energy (Ha)", fontsize=13)
+ax.set_title("Convergence of Ground State Energy", fontsize=14, fontweight="bold")
 
-plt.legend()
+ax.grid(True, linestyle="--", linewidth=0.5, alpha=0.6)
+ax.set_axisbelow(True)
+
+ax.legend(fontsize=11, framealpha=0.9)
+
+ax.margins(x=0.02)
+
+fig.tight_layout()
+# plt.savefig("energy_convergence.pdf", dpi=300, bbox_inches="tight")  # pour le rapport
 plt.show()
+
 
 # %%
