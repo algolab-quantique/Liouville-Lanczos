@@ -42,6 +42,7 @@ samples = sv.sample_counts(shots)
 bitstrings = list(samples.keys())
 states = np.array([[int(b) for b in s] for s in bitstrings], dtype=int)
 print(states)
+states = np.array([[1, 0, 1, 0]])
 
 eval = SampledSubspaceProjector(states)
 H_tilde = eval.H_tilde_matrix(hamiltonian)
