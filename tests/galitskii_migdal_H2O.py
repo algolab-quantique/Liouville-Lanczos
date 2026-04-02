@@ -1,4 +1,3 @@
-# %%
 # ===== System =====
 import numpy as np
 import matplotlib.pyplot as plt
@@ -63,7 +62,7 @@ gs_energie = np.min(e).real
 coeffs = v[:, np.argmin(e)]
 print("Energy from sampled states:", gs_energie)
 
-# %%
+
 # ===== Liouville-Lanczos =====
 from LiouvilleLanczos.Lanczos import Lanczos
 from LiouvilleLanczos.Green import CF_Green, PolyLehmann_Green
@@ -217,7 +216,7 @@ sqd_stack_green = make_green_stack(
     backend="sqd",
     eps=1e-17,
 )
-# %%
+
 # ===== Plot Green fonction =====
 green_ed = true_stack_green[0][0]
 green_sqd = sqd_stack_green[0][0]
@@ -262,7 +261,7 @@ fig.tight_layout()
 # plt.savefig("green_function_comparison.pdf", dpi=300, bbox_inches="tight")
 plt.show()
 
-# %%
+
 # ===== Galistkii-Migdal =====
 from scipy.sparse import csr_array
 
@@ -377,7 +376,6 @@ for k in range(0, num_iterations):
 true_gm_energy = energy
 
 
-# %%
 # ===== Plot G-M =====
 iterations = np.arange(len(true_gm_energy))
 
@@ -417,7 +415,6 @@ fig.tight_layout()
 plt.show()
 
 
-# %%
 sv = true_gs_vector
 probs = np.abs(sv) ** 2
 
@@ -442,5 +439,3 @@ for i in range(10):
     print(
         f"{bitstrings[i]} : amplitude = {top_amplitudes[i]:.4f}, prob = {top_probs[i]:.4e}"
     )
-
-# %%
