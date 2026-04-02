@@ -34,15 +34,14 @@ true_gs_vector = S[:, 0]
 from qiskit.quantum_info import Statevector
 from LiouvilleLanczos.Quantum_computer.sqd_lanczos import SampledSubspaceProjector
 
-gs_id = np.argmin(E)
-sv = Statevector(S[:, gs_id])
-sv.seed(42)
-shots = 1000
-samples = sv.sample_counts(shots)
-bitstrings = list(samples.keys())
-states = np.array([[int(b) for b in s] for s in bitstrings], dtype=int)
-print(states)
-states = np.array([[1, 0, 1, 0]])
+# gs_id = np.argmin(E)
+# sv = Statevector(S[:, gs_id])
+# sv.seed(42)
+# shots = 1000
+# samples = sv.sample_counts(shots)
+# bitstrings = list(samples.keys())
+# states = np.array([[int(b) for b in s] for s in bitstrings], dtype=int)
+states = np.array([[1, 0, 1, 0], [0, 1, 0, 1]])
 
 eval = SampledSubspaceProjector(states)
 H_tilde = eval.H_tilde_matrix(hamiltonian)
