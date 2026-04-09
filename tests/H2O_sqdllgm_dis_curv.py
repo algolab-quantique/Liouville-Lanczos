@@ -36,8 +36,6 @@ for d in distances:
         charge=0,
     )
     problem = driver.run()
-    transformer = ActiveSpaceTransformer(num_electrons=4, num_spatial_orbitals=n)
-    problem = transformer.transform(problem)
     ferm_ham = problem.hamiltonian.second_q_op()
     nuclear_repulsion = problem.nuclear_repulsion_energy
     # mapping JW
@@ -337,7 +335,7 @@ plt.plot(
     distances,
     gm_energies,
     marker="o",
-    label="Energy from SQDLLGM (states)",
+    label="Energy from SQDLLGM",
     linestyle="--",
 )
 
