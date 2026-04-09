@@ -55,7 +55,7 @@ for d in distances:
         true_gs_energy + nuclear_repulsion
     )  # save the exact ground state energy for plotting
 
-    states = np.array([1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0])
+    states = np.array([[1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0]])
     print(states)
     eval = SampledSubspaceProjector(states)
     H_tilde = eval.H_tilde_matrix(hamiltonian)
