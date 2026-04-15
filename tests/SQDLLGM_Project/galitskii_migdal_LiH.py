@@ -115,7 +115,7 @@ def make_green_stack(
             stacked_green = np.hstack(
                 [stacked_green, green_list]
             )  # si ça converge plus vite que le critere on a un probleme
-    return stacked_green  # 6 Green par 30it
+    return abm_dict, stacked_green  # 6 Green par 30it
 
 
 def annihilation_operators(n):
@@ -196,10 +196,10 @@ def make_green_list(a, b, mm, min_iter=1):
     return green_list
 
 
-true_stack_green = make_green_stack(
+abm_dict_true, true_stack_green = make_green_stack(
     ["0-12", "1-02", "2-01"], 31, n, backend="exact", eps=1e-17
 )
-sqd_stack_green = make_green_stack(
+abm_dict_sqd, sqd_stack_green = make_green_stack(
     ["0-12", "1-02", "2-01"], 31, n, backend="sqd", eps=1e-17
 )
 # %%
@@ -367,9 +367,45 @@ fig.tight_layout()
 # plt.savefig("energy_convergence.pdf", dpi=300, bbox_inches="tight")
 plt.show()
 
-# %%
-from qiskit.visualization import plot_histogram
 
-plot_histogram(sv.probabilities_dict())
+# %% ===== Save results =====
+from tests.SQDLLGM_Project.Result_manager import ResultsManager
 
+mgr = ResultsManager()
+mgr.save(
+    molecule="LiH",
+    basis="sto-3g",
+    n_qubits=6,
+    sampling="Thresh1e-5",
+    algorithm="Green+GM",
+    data={
+        "true_green": abm_dict_true,
+        "sqd_green": abm_dict_sqd,
+        "states": states,
+        "true_gm_energy": true_gm_energy,
+        "num_orbitals": n,
+        "true_gs_energy": true_gs_energy,
+    },
+)
+
+# %% ===== Display results =====
+from tests.SQDLLGM_Project.Result_manager import ResultsManager
+
+mgr = ResultsManager()
+
+mgr.show(molecule="LiH", algorithm="Green+GM")
+mgr.plot_gm(
+    molecule="LiH",
+    basis="sto-3g",
+    n_qubits=6,
+    sampling="Thresh1e-5",
+    algorithm="Green+GM",
+)
+mgr.plot_green(
+    molecule="LiH",
+    basis="sto-3g",
+    n_qubits=6,
+    sampling="Thresh1e-5",
+    algorithm="Green+GM",
+)
 # %%

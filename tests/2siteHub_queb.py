@@ -97,7 +97,7 @@ green_ed = CF_Green(a_ed, b_ed)
 # a_sim5,b_sim5,mu_sim5 = lanczos.polynomial_hybrid(HHam,C0_spo,[C2_spo],10,5e-3)
 # green_sim = CF_Green(a_sim5,b_sim5)
 
-# ma methode
+# sqd
 eps = 1e-6
 statevector = qiskit.quantum_info.Statevector.from_instruction(GS_analytical)
 n = statevector.num_qubits

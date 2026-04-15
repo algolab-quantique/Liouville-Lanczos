@@ -11,8 +11,8 @@ warnings.filterwarnings("ignore")
 
 MAPPER = JordanWignerMapper()
 
-n = 2
-driver = PySCFDriver(atom="H .0 .0 .0; H .0 .0 0.74", basis="sto3g", spin=0, charge=0)
+n = 4
+driver = PySCFDriver(atom="H .0 .0 .0; H .0 .0 0.74", basis="6-31g", spin=0, charge=0)
 problem = driver.run()
 ferm_ham = problem.hamiltonian.second_q_op()
 
@@ -34,13 +34,15 @@ true_gs_vector = S[:, 0]
 from qiskit.quantum_info import Statevector
 from LiouvilleLanczos.Quantum_computer.sqd_lanczos import SampledSubspaceProjector
 
-# gs_id = np.argmin(E)
-# sv = Statevector(S[:, gs_id])
-# sv.seed(42)
-# shots = 1000
-# samples = sv.sample_counts(shots)
-# bitstrings = list(samples.keys())
-# states = np.array([[int(b) for b in s] for s in bitstrings], dtype=int)
+gs_id = np.argmin(E)
+sv = Statevector(S[:, gs_id])
+sv.seed(42)
+shots = 1000
+samples = sv.sample_counts(shots)
+top_bitstring = max(samples, key=samples.get)
+states = np.array([[int(b) for b in top_bitstring]], dtype=int)
+print("Sampled states:", states)
+# %%
 states = np.array([[1, 0, 1, 0], [0, 1, 0, 1]])
 
 eval = SampledSubspaceProjector(states)
@@ -94,7 +96,7 @@ def make_green_stack(
             stacked_green = np.hstack(
                 [stacked_green, green_list]
             )  # si ça converge plus vite que le critere on a un probleme
-    return stacked_green  # 6 Green par 30it
+    return abm_dict, stacked_green  # 6 Green par 30it
 
 
 def annihilation_operators(n):
@@ -174,8 +176,12 @@ def make_green_list(a, b, mm, min_iter=1):
     return green_list
 
 
-true_stack_green = make_green_stack(["0-1", "1-0"], 31, n, backend="exact", eps=1e-17)
-sqd_stack_green = make_green_stack(["0-1", "1-0"], 31, n, backend="sqd", eps=1e-17)
+abm_dict_true, true_stack_green = make_green_stack(
+    ["0-1", "1-0"], 31, n, backend="exact", eps=1e-17
+)
+abm_dict_sqd, sqd_stack_green = make_green_stack(
+    ["0-1", "1-0"], 31, n, backend="sqd", eps=1e-17
+)
 # %%
 # ===== Plot Green fonction =====
 green_ed = true_stack_green[0][0]
@@ -331,4 +337,44 @@ fig.tight_layout()
 plt.show()
 
 
+# %% ===== Save results =====
+from tests.SQDLLGM_Project.Result_manager import ResultsManager
+
+mgr = ResultsManager()
+mgr.save(
+    molecule="H2",
+    basis="sto-3g",
+    n_qubits=4,
+    sampling="Thresh1e-5",
+    algorithm="Green+GM",
+    data={
+        "true_green": abm_dict_true,
+        "sqd_green": abm_dict_sqd,
+        "states": states,
+        "true_gm_energy": true_gm_energy,
+        "num_orbitals": n,
+        "true_gs_energy": true_gs_energy,
+    },
+)
+
+# %% ===== Display results =====
+from tests.SQDLLGM_Project.Result_manager import ResultsManager
+
+mgr = ResultsManager()
+
+mgr.show(molecule="H2", algorithm="Green+GM")
+mgr.plot_gm(
+    molecule="H2",
+    basis="sto-3g",
+    n_qubits=4,
+    sampling="Thresh1e-5",
+    algorithm="Green+GM",
+)
+mgr.plot_green(
+    molecule="H2",
+    basis="sto-3g",
+    n_qubits=4,
+    sampling="Thresh1e-5",
+    algorithm="Green+GM",
+)
 # %%

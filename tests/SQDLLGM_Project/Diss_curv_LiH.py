@@ -16,26 +16,26 @@ from LiouvilleLanczos.Quantum_computer.QC_lanczos import Liouvillian_spo, sum_sp
 from LiouvilleLanczos.Lanczos import Lanczos
 from LiouvilleLanczos.Green import CF_Green, PolyLehmann_Green
 from qiskit_nature.second_q.operators import FermionicOp
+from qiskit_nature.second_q.transformers import ActiveSpaceTransformer
 import warnings
 
 warnings.filterwarnings("ignore")
 
 MAPPER = JordanWignerMapper()
 
-distances = np.linspace(0.3, 3.0, 30)
+distances = np.linspace(0.3, 3.0, 20)
 gm_energies = []
 gs_energies = []
 sqd_energies = []
-n = 2
+n = 3
 
 for d in distances:
     driver = PySCFDriver(
-        atom=f"H 0.0 0.0 0.0; H 0.0 0.0 {d}",
-        basis="sto3g",
-        spin=0,
-        charge=0,
+        atom=f"Li 0.0 0.0 0.0; H 0.0 0.0 {d}", basis="sto-3g", spin=0, charge=0
     )
     problem = driver.run()
+    transformer = ActiveSpaceTransformer(num_electrons=4, num_spatial_orbitals=n)
+    problem = transformer.transform(problem)
     ferm_ham = problem.hamiltonian.second_q_op()
     nuclear_repulsion = problem.nuclear_repulsion_energy
     # mapping JW
@@ -55,7 +55,20 @@ for d in distances:
         true_gs_energy + nuclear_repulsion
     )  # save the exact ground state energy for plotting
 
-    states = np.array([[1, 0, 1, 0], [0, 1, 0, 1]])
+    states = np.array(
+        [
+            [0, 0, 1, 1, 1, 1],
+            [0, 1, 1, 1, 1, 0],
+            [0, 1, 1, 1, 0, 1],
+            [1, 0, 1, 0, 1, 1],
+            [0, 1, 1, 0, 1, 1],
+            [1, 0, 1, 1, 0, 1],
+            [1, 0, 1, 1, 1, 0],
+            [1, 1, 0, 0, 1, 1],
+            [1, 1, 0, 1, 0, 1],
+            [1, 1, 0, 1, 1, 0],
+        ]
+    )
     print(states)
     eval = SampledSubspaceProjector(states)
     H_tilde = eval.H_tilde_matrix(hamiltonian)
@@ -173,18 +186,25 @@ for d in distances:
                 )
         return green_list
 
-    sqd_stack_green = make_green_stack(["0-1", "1-0"], 31, n, backend="sqd", eps=1e-17)
+    sqd_stack_green = make_green_stack(
+        ["0-12", "1-02", "2-01"], 31, n, backend="sqd", eps=1e-17
+    )
 
     def fermi(w):
         return w <= 0.0
 
     green = sqd_stack_green
 
-    green_mapping_h2 = [
+    green_mapping_LiH = [
         (0, 0, 0, 1),
         (0, 1, 1, 1),
-        (1, 0, 3, 1),
-        (1, 1, 2, 1),
+        (0, 2, 2, 1),
+        (1, 0, 4, 1),
+        (1, 1, 3, 1),
+        (1, 2, 5, 1),
+        (2, 0, 7, 1),
+        (2, 1, 8, 1),
+        (2, 2, 6, 1),
     ]
 
     # Galitskii_Migdal_energy
@@ -193,7 +213,7 @@ for d in distances:
     energy = []
     for k in range(0, num_iterations):
         green_list = [g for g in green[k, :]]
-        mapping_line = green_mapping_h2
+        mapping_line = green_mapping_LiH
 
         # prepare_position_maps
         def convert_matpos(mat_pos):
@@ -239,7 +259,9 @@ for d in distances:
         energy[-1] + nuclear_repulsion
     )  # save the energy from SQDLLGM for plotting
 
+
 plt.figure(figsize=(8, 5))
+
 
 plt.plot(
     distances,
@@ -259,14 +281,59 @@ plt.plot(
     distances,
     gm_energies,
     marker="o",
-    label="Energy from SQDLLGM",
+    label="Energy from SQDLLGM (states)",
     linestyle="--",
 )
+
+
 plt.xlabel("Interatomic distance (Å)", fontsize=13)
 plt.ylabel("Energy (Ha)", fontsize=13)
 plt.title("Energy from SQDLLGM vs interatomic distance", fontsize=14)
 plt.legend()
 plt.grid(True)
 plt.show()
+
+# %%
+
+error = np.abs(np.array(gm_energies) - np.array(gs_energies))
+plt.plot(distances, error)
+plt.xlabel("Interatomic distance (Å)", fontsize=13)
+plt.ylabel("Error (Ha)", fontsize=13)
+plt.title("Error in SQDLLGM energy vs interatomic distance", fontsize=14)
+plt.grid(True)
+plt.show()
+
+# %% ===== Save results =====
+from tests.SQDLLGM_Project.Result_manager import ResultsManager
+
+mgr = ResultsManager()
+mgr.save(
+    molecule="LiH",
+    basis="sto-3g",
+    n_qubits=6,
+    sampling="Thresh1e-5",
+    algorithm="Green+GM+diss_curv",
+    data={
+        "states": states,
+        "gs_energie": gs_energies,
+        "sqd_energie": sqd_energies,
+        "gm_energie": gm_energies,
+        "num_orbitals": n,
+        "distances": distances,
+    },
+)
+
+# %% ===== Display results =====
+from tests.SQDLLGM_Project.Result_manager import ResultsManager
+
+mgr = ResultsManager()
+
+mgr.show(molecule="LiH", algorithm="Green+GM+diss_curv")
+mgr.plot_diss_curv(
+    molecule="LiH",
+    basis="sto-3g",
+    n_qubits=6,
+    sampling="Thresh1e-5",
+)
 
 # %%
