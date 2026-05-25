@@ -31,7 +31,7 @@ from qiskit import transpile
 
 #%%
 
-U = 4 
+U = 4
 Ham = Line_Hubbard(-1,U/2,U,2,boundary_condition=BoundaryCondition.OPEN)
 C0 = FermionicOp(
     {
