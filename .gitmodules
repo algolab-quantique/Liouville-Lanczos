@@ -1,4 +1,0 @@
-[submodule "external/pauliarray"]
-	path = external/pauliarray
-	url = https://github.com/algolab-quantique/pauliarray.git
-	branch = simon_papier_LL

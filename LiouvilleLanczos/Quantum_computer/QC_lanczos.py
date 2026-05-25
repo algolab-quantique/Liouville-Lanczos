@@ -37,6 +37,7 @@ from typing import Optional
 import qiskit.qasm3 
 
 from qiskit.transpiler import PassManager
+
 from qiskit_ibm_runtime import RuntimeJobFailureError
 
 from pauliarray import WeightedPauliArray, PauliArray, Operator
@@ -47,7 +48,7 @@ from pauliarray.partition.commutating_paulis.exclusive_fct import (  # partition
 )
 from pauliarray.conversion.qiskit import operator_from_sparse_pauli, operator_to_sparse_pauli
 
-from pauliarray.diagonalisation.commutating_paulis.with_circuits import (
+from pauliarray.pauliarray.diagonalisation.commutating_paulis.with_circuits import (
     general_to_diagonal as general_to_diagonal_with_circuit,
 )
 

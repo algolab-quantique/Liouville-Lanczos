@@ -200,6 +200,7 @@ class Lanczos():
         value of the Fourier transform of those response function from 
         the coefficiants.
         """
+        print("__calling__ Lanczos")
         a,b,_ = self.polynomial_hybrid(H,f_0,[],max_k,min_b)
         return a,b
     
