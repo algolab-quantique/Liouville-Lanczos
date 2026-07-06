@@ -1,0 +1,263 @@
+import numpy as np
+from pathlib import Path
+from LiouvilleLanczos.Lanczos_components import Inner_product,Liouvillian,Summation
+import csv
+class Lanczos():
+    """
+    Modular implementation of Lanczos recursion and Lanczos-polynomial combined recursion.
+    The vectors in the Krylov subspace must implement the multiplication with
+    a scalar
+
+    The Lanczos recursion, in the very abstract, construct an orthonormal basis
+    spanning a Krylov subspace, whithin an Hilbert space. The Hilbert space 
+    doesn't have to be the usual Hilbert space of quantum mecanic (spanned by 
+    wavefunction or wavevectors), but any Hilbert space that may be of 
+    interest. 
+    
+    For exemple to computation response function, one can can define an Hilbert
+    spanned by quantum operators. This allow the computation of response 
+    function at any temperature, provided one can compute averages at a given 
+    temperature.
+
+    The constructor require callables implementing the following modular parts:
+    Inner_product:  Takes two object (typically operators or vectors in the 
+                    Hilbert space of the problem) and computes the inner 
+                    product between the two, returning the scalar value. This 
+                    inner product defines the Hilbert space this Lanczos 
+                    implementation works in. The vectors of that Hilbert space
+                    the Lanczos recursion works in are those objects.
+                    are the objects the innerproduct takes for arguments.
+    Liouvillian:    The generator for the Krylov subspace. Implements the 
+                    operation between the Hamiltonian and the vector's 
+                    spanning the Krylov subspace. Should be a commutator when
+                    the inner product is on quantum operator, 
+                    or the matrix product if the inner product is on states.
+                    It act on a vector in the Hilbert space and 
+                    return a different vector of the same Hilbert space. 
+                    Strictly speaking, the Liouvillian us a super-operator, is
+                    the commutator of the hamiltonian with an operator.
+    Summation:      Sum an arbitrary number of vector in the algorithm's 
+                    working Hilbert space.
+
+    If one wanted to implement Lanczos recursion on wavefunction, then 
+    the inner product would be the regular inner product between wavevectors,
+    the Liouvillian class would implement matrix-vector product, and the
+    summation would sum an arbitrary number of wavevectors
+
+    The necessary interface is specified by the abstract classes in the type hints.
+    Remember, python's type hints are just that: hints. You are not bound to use
+    those abstract types, so long as you replicate their interface.
+    """
+    def __init__(self,inner_product:Inner_product,liouvillian:Liouvillian,sum:Summation,epsilon=1e-13 ,logger = None, folder = None, degen = None):
+        self.inner_prod  = inner_product
+        self._logger = logger
+        self.Liouvillian = liouvillian
+        self.sum = sum
+        self.epsilon = epsilon
+        self.folder = folder
+        self.counter = 0
+        self.degen = degen
+
+    @property
+    def logger(self):
+        return self._logger
+    @logger.setter
+    def setter(self,new_logger):
+        self._logger = new_logger
+
+    def polynomial_hybrid(self, H, f_0, other_vectors, max_k, min_b=1e-10):
+        
+        """
+        Perform Lanczos recursion in the Krylov subspace spanned by the repeated 
+        action of H on the initial vector f_0, and use it to compute polynomial 
+        decomposition of the response functions with the list of other_vectors.
+        Perform up to max_k iteration.
+        The Krylov subspace is considered completely determined when the new 
+        direction defined by the action of H on the previous vector has a norm 
+        smaller then min_b.
+        The action of H on f_0 is defined by the Liouvillian implementation 
+        supplied to the Lanczos constructor.
+        The norm of the vectors are defined by the inner_product supplied to the
+        Lanczos contructor.
+        Returns that a and b and mu coefficients of the Lanczos recursion.
+
+        Concerning the a,b coefficient, consult the docstring of this class 
+        __call__ method.
+        There are as many set of mu coefficiant in output as there are vectors 
+        in other_vectors. Along with the a and b coefficients, the mu
+        coefficients contain the necessary information to compute the response
+        function $i(v_i(t)|f_0(0))\\theta(t)$ where $v_i$ is a vector found in 
+        other_vectors.
+        Liouville-Lanczos' Green submodule contains the facilities to compute 
+        the Fourrier transform of those response function.
+        """
+        use_checkpoint = False
+        if self.logger is not None:  # srtart from logger content
+            #If live logger load saved data
+            if hasattr(self.logger, 'results'):
+                saved_a = self.logger.results['a']
+                saved_b = self.logger.results['b']
+                saved_m = self.logger.results['mi']
+                saved_f = self.logger.results['fi']
+                ## need two iteration done
+                use_checkpoint = len(saved_a)>1 and len(saved_a)==len(saved_b)==len(saved_m)==len(saved_f) 
+        
+        if use_checkpoint:  # i = -2 ip = -1
+            i = len(saved_a)-1
+            if max_k is None:  # return full records
+                return saved_a, saved_b, saved_m
+            if max_k <= len(saved_a):
+                return saved_a[:max_k], saved_b[:max_k], saved_m[:max_k]
+            ip = len(saved_a)
+            b = saved_b[:ip]
+            f_i = saved_f[i]
+            mi = saved_m[:ip]
+            f_ip = self.Liouvillian(-H, f_i)
+            a_i = saved_a[i]
+            a = saved_a[:ip]
+            start = ip
+        else:
+            assert max_k > 1, "No checkpoint! use max_k > 1 to start computation"
+            i = 0
+            b = [np.sqrt(self.inner_prod(f_0, f_0, real_result=True, Name="b_0"))]
+            f_i = f_0/b[-1]
+            mi = [[self.inner_prod(o, f_i, real_result=False, Name=f"m{m}_{0}") for m, o in enumerate(other_vectors)] ]
+            f_ip = self.Liouvillian(-H, f_i)
+            a_i = self.inner_prod(f_ip, f_i, real_result=True, Name="a_0")
+            if self.logger:
+                self.logger(i, f_i, a_i, b[-1],  mi[-1])
+            a = [a_i]
+            start = 1
+        f_ip = self.sum(f_ip, - a_i*f_i)
+        b_ip = np.sqrt(self.inner_prod(f_ip, f_ip, real_result=True, Name="b_1"))
+        f_ip = f_ip / b_ip
+        f_i, f_im = f_ip, f_i
+        for i in range(start, max_k):
+            if b_ip < min_b:
+                return a, b, mi
+            mi.append([self.inner_prod(o, f_i, real_result=False, Name=f"m{m}_{i}") for m, o in enumerate(other_vectors)]) #**not** always real
+            f_ip = self.Liouvillian(-H, f_i)
+            
+            try:
+                a_i = self.inner_prod(f_ip, f_i, real_result=True, Name=f"a_{i}") #always real
+                a.append(a_i)
+                
+            except Exception as e:
+                print(f"early termination a at iteration {i}")
+                print(e)
+                return a, b, mi
+            b.append(b_ip)
+            if self.logger:
+                self.logger(i, f_i, a[-1], b[-1], mi[-1])  
+            f_ip = self.sum(f_ip, -a_i*f_i, -b[-1]*f_im)
+            
+            try:
+                b2 = self.inner_prod(f_ip, f_ip, real_result=True, Name=f"b^2_{i+1}") #Always real
+                assert np.real(b2)>self.epsilon , f"b^2={b2} is smaller than {self.epsilon}, terminating"
+                b_ip = np.sqrt(b2)
+            except Exception as e:
+                print(f"early termination b at iteration {i}")
+                print(e)
+                return a, b, mi
+            f_ip = f_ip / b_ip
+            f_i, f_im = f_ip, f_i
+
+            
+            if i in {4,10, 20, 30, 35, 40, 45, 50, 55, 60, 65, 70, 80, 90}:
+                write(a,b,mi,i, self.folder, self.counter, self.degen)
+
+        self.counter = self.counter +1
+
+        return a, b, mi
+         
+    def __call__(self,H,f_0,max_k,min_b=1e-10):
+        """
+        Perform Lanczos recursion in the Krylov subspace spanned by the repeated 
+        action of H on the initial vector f_0. Perform up to max_k iteration.
+        The Krylov subspace is considered completely determined when the new 
+        direction defined by the action of H on the previous vector has a norm 
+        smaller then min_b.
+        The action of H on f_0 is defined by the Liouvillian implementation 
+        supplied to the Lanczos constructor.
+        The norm of the vectors are defined by the inner_product supplied to the
+        Lanczos contructor.
+        Returns that a and b coefficients of the Lanczos recursion.
+
+        The coefficient can be viewed as a tridiagonal matrix, with the a_0..a_n
+        coefficients on the diagonnal and the b_1..b_n coeffient on the first 
+        super- and sub-diagonnals. When assemble in that manner, it is the 
+        matrix representation of the Liouvillian.
+        Given f_0, this matrix form can be used to compute the response function
+        $i(f_0(t)|f_0(0))\\theta(t)$ where the inner product $(a|b)$ is the one 
+        provided to the constructor.
+        Liouville Lanczos's Green submodule provide facilities to compute the 
+        value of the Fourier transform of those response function from 
+        the coefficiants.
+        """
+        a,b,_ = self.polynomial_hybrid(H,f_0,[],max_k,min_b)
+        return a,b
+    
+#%%
+def write(a,b,mi,i,folder, id, degen):
+    a = np.asarray(a)
+    b = np.asarray(b)
+    mi = np.asarray(mi)
+
+    base_folder = Path(__file__).resolve().parent
+
+    output_folder = base_folder / "results" / folder / "green_coefficients" 
+    output_folder.mkdir(parents=True, exist_ok=True)
+    output_file = output_folder / f"{degen}_{int(id)}_{i}_iterations.csv"
+
+    if mi.ndim == 1:
+        # Turn a 1D mi array into a column vector.
+        mi = mi.reshape(-1, 1)
+    
+     # Find the maximum number of rows needed.
+    num_rows = max(len(a), len(b), mi.shape[0])
+
+    # Find how many moment columns mi has.
+    num_moments = mi.shape[1]
+
+    # Build the CSV header.
+    header = ["index", "a", "b"] + [f"mu_{m}" for m in range(num_moments)]
+
+    # Open the CSV file for writing.
+    with open(output_file, mode="w", newline="") as file:
+
+        # Create the CSV writer.
+        writer = csv.writer(file)
+
+        # Write the header row.
+        writer.writerow(header)
+
+        # Write one row per iteration.
+        for row_index in range(num_rows):
+
+            # Use 1-based iteration numbering.
+            index = row_index + 1
+
+            # Get a[row_index] if it exists, otherwise leave blank.
+            a_value = a[row_index] if row_index < len(a) else ""
+
+            # Get b[row_index] if it exists, otherwise leave blank.
+            b_value = b[row_index] if row_index < len(b) else ""
+
+            # Get the mu values for this row if they exist.
+            if row_index < mi.shape[0]:
+
+                # Convert the mu row to a normal Python list.
+                mu_values = list(mi[row_index, :])
+
+            else:
+
+                # If this row has no mu values, leave those columns blank.
+                mu_values = [""] * num_moments
+
+            # Write the full row to the CSV.
+            writer.writerow([index, a_value, b_value] + mu_values)
+
+    # Print where the file was saved.
+    print(f"Wrote coefficients to: {output_file}")
+
+
