@@ -138,10 +138,9 @@ class inner_product_spo(Base_inner_product):
         Set a Name to easily identify the associated jobs on IBM quantum.
         """
         Bc = B.adjoint()
-        left = relative_simplify_spo(A@Bc, self.eps)
-        right = relative_simplify_spo(Bc@A, self.eps)
-        f = relative_simplify_spo(left + right ,self.eps)
-        del left, right, Bc
+        com = A@Bc + Bc@A
+        f = relative_simplify_spo(com,self.eps, chunk_size=10000)
+        del com, Bc
         obs_real, obs_imag = separate_imag(f)        
         out = complex(0)
         if self._spo_has_terms(obs_real, self.eps):

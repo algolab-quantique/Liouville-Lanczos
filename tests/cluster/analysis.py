@@ -6,15 +6,15 @@ from pathlib import Path
 import csv
 import numpy as np
 
-def read(folder, degen, id, i, analytic:bool):
+def read(folder, degen, id, analytic:bool):
     # Find the folder where this Python file lives.
     base_folder = Path(__file__).resolve().parent
     inner = "matrix" if analytic else "inner"
     # Build the folder where the CSV files were written.
-    input_folder = base_folder / "results"/ inner / folder / "green_coefficients"
+    input_folder = base_folder / "results"
 
     # Build the exact CSV filename.
-    input_file = input_folder / f"{degen}_{id}_{i}_iterations.csv"
+    input_file = input_folder / f"{degen}_{id}_{inner}_{folder}.csv"
 
     print(f"Reading coefficients from: {input_file}")
     # Check that the file exists before reading.
@@ -220,10 +220,10 @@ def gm(G_full):
     return E_GM
 
 
+
 #%%
 opset = ["0-1234","1-23","2-"]
 iterations = [10,20,30,35,40,45,50,55,60,65,70,80,90]
-iterations = [9]
 analytic_greens = None
 analytic_energies = None
 inner_greens = None
@@ -232,7 +232,7 @@ inner_energies = None
 for analytic in [True,False]:
     spin_greens_iter = []
     spin_energies_iter = []
-    for iter in iterations:
+    for iter in iterations: # slice iteration 90 is equivalent to list of iterations
         spin_greens = []
         spin_energies = []
         for c_fermi in ["up","down"]:
@@ -245,10 +245,10 @@ for analytic in [True,False]:
                     w = np.linspace(-5.5,5.5,1000)-1e-1j
                     main_i, other_i = op.split("-")
                     i = int(main_i)
-                    alpha,beta,mm = read(c_fermi, degen = GS, id=i , i = iter, analytic = analytic)
-                    alpha = np.asarray(alpha)
-                    beta = np.asarray(beta)
-                    mm = np.asarray(mm)
+                    alpha,beta,mm = read(c_fermi, degen = GS, id=i, analytic = analytic)
+                    alpha = np.asarray(alpha[:iter])
+                    beta = np.asarray(beta[:iter])
+                    mm = np.asarray(mm[:iter,:])
                     
                     g = CF_Green(alpha,beta)
                     G[i][i]= g
@@ -283,7 +283,17 @@ for analytic in [True,False]:
 
 # %%
 
+alpha,beta,mm = read("up", degen = 0, id=0, analytic = False)
+G00_1 = CF_Green(alpha,beta)
+alpha,beta,mm = read("up", degen = 1, id=0, analytic = False)
+G00_2 = CF_Green(alpha,beta)
+w = np.linspace(-5.5,5.5,1000)-1e-1j
+plt.figure()
+plt.plot(w.real, np.imag(G00_1(w)))
+plt.plot(w.real,np.imag(G00_2(w)))
+plt.show
 
+#%%
 # spin_greens_iter [iteration index] [spin up or spin down] [degenerate state index] [i,j]
 # spin_energies_iter [iteration index] [spin up or spin down] [degenerate state index]
 plt.figure()

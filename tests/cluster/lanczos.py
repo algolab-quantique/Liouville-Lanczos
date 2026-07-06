@@ -167,10 +167,7 @@ class Lanczos():
             END = time.perf_counter()
             print("iteration ", i, "time taken", END-START)
             print(f"size: f_i {f_i.size}, f_im {f_im.size}, f_ip {f_ip.size}")
-            if i in {4,10, 20, 30, 35, 40, 45, 50, 55, 60, 65, 70, 80, 90}:
-                write(a,b,mi,i, self.folder, self.counter, self.degen)
-
-        self.counter = self.counter +1
+        write(a,b,mi, self.folder, self.counter, self.degen)
 
         return a, b, mi
          
@@ -202,16 +199,16 @@ class Lanczos():
         return a,b
     
 #%%
-def write(a,b,mi,i,folder, id, degen):
+def write(a,b,mi,folder, id, degen):
     a = np.asarray(a)
     b = np.asarray(b)
     mi = np.asarray(mi)
 
     base_folder = Path(__file__).resolve().parent
 
-    output_folder = base_folder / "results" / folder / "green_coefficients" 
+    output_folder = base_folder / "results"  
     output_folder.mkdir(parents=True, exist_ok=True)
-    output_file = output_folder / f"{degen}_{int(id)}_{i}_iterations.csv"
+    output_file = output_folder / f"{degen}_{int(id)}_{folder}.csv"
 
     if mi.ndim == 1:
         # Turn a 1D mi array into a column vector.

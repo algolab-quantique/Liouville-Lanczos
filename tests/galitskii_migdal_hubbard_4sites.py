@@ -189,7 +189,7 @@ def green_mapping_line(n):
     if n == 5:
         opset = ["0-1234", "1-23", "2-"]
         green_mapping = [
-            (0, 0, 0, 1),
+            (0, 0, 0, 1),       #(i,j,opset index, weight)
             (4, 4, 0, 1),
             (0, 1, 1, 1),
             (0, 1, 1, 1),

@@ -174,6 +174,7 @@ class Lanczos():
                 return a, b, mi
             f_ip = f_ip / b_ip
             f_i, f_im = f_ip, f_i
+
         return a, b, mi
          
     def __call__(self,H,f_0,max_k,min_b=1e-10):
