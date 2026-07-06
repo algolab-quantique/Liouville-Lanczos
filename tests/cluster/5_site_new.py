@@ -121,7 +121,7 @@ opset = ["0-1234","1-23","2-"]
 
 
 #%%
-if False:
+if True:
     for i , c_fermi in enumerate([c_fermi_up, c_fermi_down]):
         fold = "matrix/up" if i == 0 else "matrix/down"
         for j, GS in enumerate(degen_gs_vectors):

@@ -1,6 +1,7 @@
 import numpy as np
 from pathlib import Path
 from LiouvilleLanczos.Lanczos_components import Inner_product,Liouvillian,Summation
+import time
 import csv
 class Lanczos():
     """
@@ -133,6 +134,7 @@ class Lanczos():
         f_ip = f_ip / b_ip
         f_i, f_im = f_ip, f_i
         for i in range(start, max_k):
+            START = time.perf_counter()
             if b_ip < min_b:
                 return a, b, mi
             mi.append([self.inner_prod(o, f_i, real_result=False, Name=f"m{m}_{i}") for m, o in enumerate(other_vectors)]) #**not** always real
@@ -162,7 +164,9 @@ class Lanczos():
             f_ip = f_ip / b_ip
             f_i, f_im = f_ip, f_i
 
-            
+            END = time.perf_counter()
+            print("iteration ", i, "time taken", END-START)
+            print(f"size: f_i {f_i.size}, f_im {f_im.size}, f_ip {f_ip.size}")
             if i in {4,10, 20, 30, 35, 40, 45, 50, 55, 60, 65, 70, 80, 90}:
                 write(a,b,mi,i, self.folder, self.counter, self.degen)
 
