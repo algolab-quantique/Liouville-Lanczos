@@ -168,6 +168,7 @@ class Lanczos():
             print("iteration ", i, "time taken", END-START)
             print(f"size: f_i {f_i.size}, f_im {f_im.size}, f_ip {f_ip.size}")
         write(a,b,mi, self.folder, self.counter, self.degen)
+        self.counter += 1
 
         return a, b, mi
          
