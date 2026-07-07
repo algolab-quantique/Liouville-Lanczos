@@ -109,7 +109,7 @@ opset = ["0-12", "1-"]
 #%%
 if True:
     for i , c_fermi in enumerate([c_fermi_up, c_fermi_down]):
-        fold = "matrix_up" if i == 0 else "matrix_down"
+        fold = "matrix_up_three" if i == 0 else "matrix_down_three"
         for j, GS in enumerate(degen_gs_vectors):
             lanczos = LCZ(MatrixState_inner_product(GS),Matrix_Liouvillian(), Matrix_sum(), folder = fold, degen = j)
             for op in opset:
@@ -128,7 +128,7 @@ apply_adjacent_fswap_permutation(GS2)
 
 greens = []
 for i , c_fermi in enumerate([c_fermi_up, c_fermi_down]):
-    fold = "inner_up" if i == 0 else "inner_down"
+    fold = "inner_up_three" if i == 0 else "inner_down_three"
     fermi = []
     for j, GS in enumerate([GS1,GS2]):
         GROUND = []
