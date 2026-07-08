@@ -105,10 +105,9 @@ class inner_product_spo(Base_inner_product):
     
     def _estimate_spo_chunked(self,
         observable: SparsePauliOp,
-        eps: float,
         chunk_size: int = 1000,
-        name: Optional[str] = None,
     ):
+        name = f"estimate_spo_chunked_{id(observable)}"
         """
         Estimate <state|observable|state> in chunks so Qiskit never converts
         one huge SparsePauliOp into a massive internal dict.
@@ -141,13 +140,13 @@ class inner_product_spo(Base_inner_product):
         left = relative_simplify_spo(A@Bc, self.eps) 
         right = relative_simplify_spo(Bc@A, self.eps)
         f = relative_simplify_spo(left + right ,self.eps, chunk_size=10000)
-        del left , rigt , Bc
+        del left , right , Bc
         obs_real, obs_imag = separate_imag(f)        
         out = complex(0)
         if self._spo_has_terms(obs_real, self.eps):
             isa_obs_real = obs_real.apply_layout(self.state.layout)
             try:
-                out += np.real(self._estimate_spo_chunked(isa_obs_real, self.eps, name=Name))
+                out += np.real(self._estimate_spo_chunked(isa_obs_real, chunk_size=10000))
             except RuntimeJobFailureError as e:
                 dump_qpu_error((self.state, isa_obs_real), e, note="real")
             del isa_obs_real
@@ -155,7 +154,7 @@ class inner_product_spo(Base_inner_product):
         if not real_result and any(np.abs(obs_imag.coeffs)>=self.eps):
             isa_obs_imag = obs_imag.apply_layout(self.state.layout)
             try:
-                out_imag = np.real(self._estimate_spo_chunked(isa_obs_imag, self.eps, name=Name))
+                out_imag = np.real(self._estimate_spo_chunked(isa_obs_imag, chunk_size=10000))
             except RuntimeJobFailureError as e:
                 dump_qpu_error((self.state, isa_obs_imag), e, note="imag")
             del isa_obs_imag

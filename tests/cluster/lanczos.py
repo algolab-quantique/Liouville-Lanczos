@@ -136,6 +136,7 @@ class Lanczos():
         for i in range(start, max_k):
             START = time.perf_counter()
             if b_ip < min_b:
+                write(a, b, mi, self.folder, self.counter, self.degen)
                 return a, b, mi
             mi.append([self.inner_prod(o, f_i, real_result=False, Name=f"m{m}_{i}") for m, o in enumerate(other_vectors)]) #**not** always real
             f_ip = self.Liouvillian(-H, f_i)
@@ -147,6 +148,8 @@ class Lanczos():
             except Exception as e:
                 print(f"early termination a at iteration {i}")
                 print(e)
+                write(a, b, mi, self.folder, self.counter, self.degen)
+                self.counter += 1
                 return a, b, mi
             b.append(b_ip)
             if self.logger:
@@ -160,6 +163,8 @@ class Lanczos():
             except Exception as e:
                 print(f"early termination b at iteration {i}")
                 print(e)
+                write(a, b, mi, self.folder, self.counter, self.degen)
+                self.counter += 1
                 return a, b, mi
             f_ip = f_ip / b_ip
             f_i, f_im = f_ip, f_i
@@ -167,7 +172,9 @@ class Lanczos():
             END = time.perf_counter()
             print("iteration ", i, "time taken", END-START)
             print(f"size: f_i {f_i.size}, f_im {f_im.size}, f_ip {f_ip.size}")
-        write(a,b,mi, self.folder, self.counter, self.degen)
+            if END - START > 300:
+                return a, b, mi
+            write(a,b,mi, self.folder, self.counter, self.degen)
         self.counter += 1
 
         return a, b, mi

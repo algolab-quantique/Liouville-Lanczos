@@ -11,7 +11,7 @@ from qiskit.circuit.library import UnitaryGate
 from qiskit.circuit.library import real_amplitudes
 # %%
 
-kmax = 10
+kmax = 6
 eps = 1e-9
 
 def apply_adjacent_fswap_permutation(qc):
@@ -118,10 +118,10 @@ c_fermi_down = [to_sparse_pauli(FermionicOp({f"-_{i+5}": 1}, num_spin_orbitals=2
 c_fermi_up = [to_sparse_pauli(FermionicOp({f"+_{i+5}": 1}, num_spin_orbitals=2 * 5)) for i in range(5)]
 opset = ["0-1234","1-23","2-"]
 
-
+USE_IBM_BACKEND = False
 
 #%%
-if False:
+if not USE_IBM_BACKEND and True:
     for i , c_fermi in enumerate([c_fermi_up, c_fermi_down]):
         fold = "matrix_up_five" if i == 0 else "matrix_down_five"
         for j, GS in enumerate(degen_gs_vectors):
@@ -136,21 +136,58 @@ if False:
 
 #%%
 
+
 GS1 = vqe_hubbard_5sites.copy()
 GS2 = GS1.copy()
 apply_adjacent_fswap_permutation(GS2)
 
+if USE_IBM_BACKEND:
+    from qiskit_ibm_runtime import QiskitRuntimeService, EstimatorV2 as IBMEstimatorV2
+    from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 
+    service = QiskitRuntimeService()
+
+    ibm_backend = service.least_busy(
+        operational=True,
+        simulator=False,
+        min_num_qubits=vqe_hubbard_5sites.num_qubits,
+    )
+
+    print(f"Using IBM backend: {ibm_backend.name}")
+
+    pm = generate_preset_pass_manager(
+        backend=ibm_backend,
+        optimization_level=1,
+    )
+
+    estimator = IBMEstimatorV2(mode=ibm_backend)
+    estimator.options.resilience_level = 1
+    estimator.options.default_precision = 0.03
+    print(service.active_account())
+    print(ibm_backend.name)
+    print(ibm_backend.num_qubits)
+    GS1_run = pm.run(GS1)
+    GS2_run = pm.run(GS2)
+
+else:
+    ibm_backend = None
+    pm = None
+    estimator = AerEstimatorV2()
+    GS1_run = GS1
+    GS2_run = GS2
+
+#%%
 for i , c_fermi in enumerate([c_fermi_up, c_fermi_down]):
     fold = "inner_up_five" if i == 0 else "inner_down_five"
     for j, GS in enumerate([GS1,GS2]):
-        lanczos = LCZ(inner_product_spo(GS,AerEstimatorV2(),eps),Liouvillian_spo(eps),sum_spo(eps), folder = fold, degen = j)
+        lanczos = LCZ(inner_product_spo(GS,estimator,eps),Liouvillian_spo(eps),sum_spo(eps), folder = fold, degen = j)
         for op in opset:
             main_i, other_i = op.split("-")
-            i = int(main_i)
-            main_op = c_fermi[i]
-            other_ops = [c_fermi[int(i)] for i in other_i]
+            idx = int(main_i)
+            main_op = c_fermi[idx]
+            other_ops = [c_fermi[int(k)] for k in other_i]
             lanczos.polynomial_hybrid(hamiltonian ,main_op ,[o for o in other_ops],kmax)
+            del main_i, other_i, idx, main_op, other_ops
 
 
 # %%

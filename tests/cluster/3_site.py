@@ -105,38 +105,73 @@ c_fermi_up = [to_sparse_pauli(FermionicOp({f"+_{i+3}": 1}, num_spin_orbitals=2 *
 opset = ["0-12", "1-"]
 
 
+USE_IBM_BACKEND = False
 
 #%%
-if True:
-    for i , c_fermi in enumerate([c_fermi_up, c_fermi_down]):
-        fold = "matrix_up_three" if i == 0 else "matrix_down_three"
+if not USE_IBM_BACKEND:
+    for spin_idx , c_fermi in enumerate([c_fermi_up, c_fermi_down]):
+        fold = "matrix_up_three" if spin_idx == 0 else "matrix_down_three"
         for j, GS in enumerate(degen_gs_vectors):
             lanczos = LCZ(MatrixState_inner_product(GS),Matrix_Liouvillian(), Matrix_sum(), folder = fold, degen = j)
             for op in opset:
                 main_i, other_i = op.split("-")
-                i = int(main_i)
-                main_op = c_fermi[i]
-                other_ops = [c_fermi[int(i)] for i in other_i]
+                row_idx = int(main_i)
+                main_op = c_fermi[row_idx]
+                other_ops = [c_fermi[int(col_char)] for col_char in other_i]
                 a,b,_ = lanczos.polynomial_hybrid(hamiltonian.to_matrix(),main_op.to_matrix(),[o.to_matrix() for o in other_ops],kmax)
 
 
 #%%
+from qiskit_aer.primitives import EstimatorV2 as AerEstimatorV2
 
 GS1 = vqe_hubbard_3sites.copy()
 GS2 = GS1.copy()
 apply_adjacent_fswap_permutation(GS2)
 
-greens = []
+
+
+if USE_IBM_BACKEND:
+    from qiskit_ibm_runtime import QiskitRuntimeService, EstimatorV2 as IBMEstimatorV2
+    from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
+    service = QiskitRuntimeService()
+
+    ibm_backend = service.least_busy(
+        operational=True,
+        simulator=False,
+        min_num_qubits=vqe_hubbard_3sites.num_qubits,
+    )
+
+    print(f"Using IBM backend: {ibm_backend.name}")
+
+    pm = generate_preset_pass_manager(
+        backend=ibm_backend,
+        optimization_level=1,
+    )
+
+    estimator = IBMEstimatorV2(mode=ibm_backend)
+    estimator.options.resilience_level = 1
+    estimator.options.default_precision = 0.03
+    print(service.active_account())
+    print(ibm_backend.name)
+    print(ibm_backend.num_qubits)
+    GS1_run = pm.run(GS1)
+    GS2_run = pm.run(GS2)
+else:
+    ibm_backend = None
+    pm = None
+    estimator = AerEstimatorV2()
+    GS1_run = GS1
+    GS2_run = GS2
+
 for i , c_fermi in enumerate([c_fermi_up, c_fermi_down]):
     fold = "inner_up_three" if i == 0 else "inner_down_three"
     fermi = []
-    for j, GS in enumerate([GS1,GS2]):
-        GROUND = []
-        lanczos = LCZ(inner_product_spo(GS,AerEstimatorV2(),eps),Liouvillian_spo(eps),sum_spo(eps), folder = fold, degen = j)
+    for j, GS in enumerate([GS1_run,GS2_run]):
+        lanczos = LCZ(inner_product_spo(GS, estimator , eps),Liouvillian_spo(eps),sum_spo(eps), folder = fold, degen = j)
         for op in opset:
             main_i, other_i = op.split("-")
-            i = int(main_i)
-            main_op = c_fermi[i]
-            other_ops = [c_fermi[int(i)] for i in other_i]
+            idx = int(main_i)
+            main_op = c_fermi[idx]
+            other_ops = [c_fermi[int(k)] for k in other_i]
             lanczos.polynomial_hybrid(hamiltonian ,main_op ,[o for o in other_ops],kmax)
             
