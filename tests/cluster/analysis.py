@@ -416,7 +416,7 @@ for spin_idx, spin_label in enumerate(spin_labels):
 
     # Average over degenerate GS sectors, do NOT sum them.
     analytic_vals = [
-        0.5 * (
+        (
             analytic_energies[k][spin_idx][0]
             + analytic_energies[k][spin_idx][1]
         )
@@ -424,7 +424,7 @@ for spin_idx, spin_label in enumerate(spin_labels):
     ]
 
     inner_vals = [
-        0.5 * (
+        (
             inner_energies[k][spin_idx][0]
             + inner_energies[k][spin_idx][1]
         )
@@ -456,7 +456,7 @@ for spin_idx, spin_label in enumerate(spin_labels):
 
 plt.plot(
     iters,
-    analytic_spin_sum,
+    analytic_spin_sum*0.5,
     marker="o",
     linestyle="-",
     linewidth=3,
@@ -465,7 +465,7 @@ plt.plot(
 
 plt.plot(
     iters,
-    inner_spin_sum,
+    inner_spin_sum*0.5,
     marker="x",
     linestyle="--",
     linewidth=3,
