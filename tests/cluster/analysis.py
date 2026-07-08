@@ -6,9 +6,55 @@ from qiskit_nature.second_q.mappers import JordanWignerMapper
 from qiskit.quantum_info import SparsePauliOp
 from pathlib import Path
 import csv
+from qiskit.primitives import StatevectorEstimator
 import numpy as np
+from qiskit.circuit.library import real_amplitudes
 
-n = 5
+vqe_hubbard_5sites = real_amplitudes(num_qubits=10, reps=10, entanglement='linear')
+vqe_hubbard_5sites = vqe_hubbard_5sites.assign_parameters(np.array([
+    2.3447832964919617, 1.4474302559938388, 4.713514444810458, 4.483509407584665, 4.400570018376737,
+    3.1599828310535765, 1.4811927345460485, 4.401225733572901, 4.9385281687492535, 4.712960988556388,
+    3.9345915095063786, 4.798725490293983, 1.6957962772935746, 4.18431690489243, 1.4314151293812927,
+    3.6586171333767994, 2.0421913767282662, 4.861557641736541, 4.7384698726472285, 3.734752714234186,
+    5.6471486574706375, 4.711408611937339, 4.747181489931575, 4.785705709657881, 5.773891260485987,
+    3.164130952306159, 5.87030802541217, 4.62641468296399, 1.5715680039711153, 3.17431807296486,
+    0.5479225386262592, 4.7125194894458895, 1.5707646540418294, 1.5708020948979795, 4.712386411886244,
+    1.5707956120001854, 1.570800746348143, 4.712386246353408, 6.283183592137927, 6.283185024020641,
+    6.283108640215091, -0.31483874554879887, 2.5684582292450258, 6.641278834606595, 1.595865508133264,
+    3.5586234337709435, 1.6436999282262008, 1.5707985348741194, -2.0956374394721885e-06, -0.3551216158824308,
+    3.1415901265735933, 4.413018428808857, 5.313840134725547, 4.478621591268556, 3.109855048054034,
+    6.519653639112034, -0.14634612324162952, 4.712390805311075, 0.2152617755934342, 7.820990358428639,
+    3.141596566559733, 4.315707796787452, 1.591058317291354, 1.5511314469306399, 4.654357447200541,
+    4.708047365972247, 1.5707966504313826, 4.712389377489952, 4.710279668850846, 4.739490027393471,
+    3.14158387406988, 4.71821903393061, 4.752704332942756, 4.680290507834347, 1.3224139337263787,
+    3.6174009369047324, 1.5707939141135263, 1.5335737771548246, 4.690684139651661, 1.5408585947576945,
+    9.324079134959437e-06, 1.6182910007664684, 1.6703109721089433, 1.4147301236346137, 1.5740252318995949,
+    1.5707960492817332, 1.570798283653272, 1.5191349714558515, 1.6161172741980936, -0.31862288861427424,
+    1.5707879571326253, 6.165949907011652, 6.6176881469443485, 1.2673449170192668, 3.6129609342647377,
+    3.1415932962911555, 5.9963476937642755, 2.8726739404577013, 4.769961554828166, 2.9322930511089185,
+    1.5707945163585162, 4.712389541091441, 4.712391063980809, 1.5707945358999216, 1.5707993205185902,
+    4.7123863681724245, 1.5707962675025136, 4.712390122552536, 4.712389940305301, 4.712388510339969
+]))
+
+vqe_hubbard_3sites = real_amplitudes(num_qubits=6, reps=11, entanglement='linear')
+vqe_hubbard_3sites = vqe_hubbard_3sites.assign_parameters(np.array([
+    5.246829583426229, 1.8445563598975319, 6.249341224922228, 5.547426630865061, 4.204112886091582,
+    4.7123853975763605, 0.27755320293694075, 0.32924783165591026, 1.5501725153481376, 0.354654347037912,
+    1.4126950505240836, 7.524339982913663e-06, 1.5454883723953319, 4.008676262413297, 0.5471153440483539,
+    0.6439116484454839, 5.416150750408826, 3.141590029386429, 1.121133004167295, 4.919561698711213,
+    4.354025416990712, 4.348236205036469, 0.1627483139705849, 6.890458045940891e-06, 1.5750620500544459,
+    3.925552761663296, 2.4735512439001406, 3.564021121427497, 2.1847082492649674, 3.1415875290047737,
+    5.145406231818936, 3.082671747231, 4.755880471423207, 1.5314536798535008, 5.823307617043694,
+    3.1416008591215223, 5.901892324799543, 1.4437881974849553, 4.645825634069647, 1.6387913496744664,
+    5.2749649006268555, 1.1584242198623043e-05, 2.4788427008935474, 5.261826591438184, 5.982045041499495,
+    2.24084148657242, 1.3918515401467277, 3.141590524117431, 2.6212585750135275, 0.0, 4.140488402169957,
+    0.6887497275343819, 0.16071147559368984, 4.712382212081382, 5.6131238667553776, 0.2442058266515827,
+    2.815716430300995, 1.696363607754504, 4.71239011907928, 6.283185307179586, 2.0669264858298853,
+    2.441456446485303, 1.273233624886327, 2.646377569674503, 0.957628396457077, 1.8447208439653136,
+    5.224543370694376, 1.583011829806925, 6.116083873171027, 6.0304071284479774e-06, 1.570785721175754,
+    2.9229147479846883e-06
+]))
+
 
 
 def to_sparse_pauli(op):
@@ -47,20 +93,7 @@ def hubbard(hop=np.array([[0, 1], [1, 0]]), u=4, mu=None):
     )
     HH = -hopping + u * interaction - mu * occupation
     
-    C0 = FermionicOp(
-        {
-            "+_0": 1,
-        },
-        num_spin_orbitals=2*n,
-    )
-    return to_sparse_pauli(HH), to_sparse_pauli(C0)
-
-hopping = np.diag(np.ones(n - 1), 1) + np.diag(np.ones(n - 1), -1)
-hamiltonian, C0 = hubbard(hopping, 4, mu=2)     #|up, up, up, up, up, down, down, down, down, down>
-
-eigvals, eigvecs = np.linalg.eigh(hamiltonian.to_matrix())
-
-true_gs_energy = eigvals[0]
+    return to_sparse_pauli(HH)
 
 def read(folder, degen, id, analytic:bool, site:str = "five"):
     # Find the folder where this Python file lives.
@@ -70,7 +103,7 @@ def read(folder, degen, id, analytic:bool, site:str = "five"):
     input_folder = base_folder / "results"
 
     # Build the exact CSV filename.
-    input_file = input_folder / f"{degen}_{id}_{inner}_{folder}_{site}.csv"
+    input_file = input_folder/ "best" / f"{degen}_{id}_{inner}_{folder}_{site}.csv"
     # Check that the file exists before reading.
     if not input_file.exists():
         raise FileNotFoundError(f"Could not find file: {input_file}")
@@ -308,14 +341,31 @@ def gm(G_full, n = 5):
 
 #%%
 
+n = 3
 
+hopping = np.diag(np.ones(n - 1), 1) + np.diag(np.ones(n - 1), -1)
+hamiltonian = hubbard(hopping, 4, mu=2)     #|up, up, up, up, up, down, down, down, down, down>
+
+eigvals, eigvecs = np.linalg.eigh(hamiltonian.to_matrix())
+
+true_gs_energy = eigvals[0]
+
+H = to_sparse_pauli(hamiltonian)
+
+estimator = StatevectorEstimator()
+if n == 5:
+    job = estimator.run([(vqe_hubbard_5sites,H)])
+else:
+    job = estimator.run([(vqe_hubbard_3sites,H)])
+
+job_result = job.result()[0].data.evs
 
 opset = ["0-1234","1-23","2-"] if n == 5 else ["0-12", "1-"]
 analytic_greens = []
 analytic_energies = []
 inner_greens = []
 inner_energies = []
-iterations = range(1, 18 + 1) if n == 3 else range(1, 6+1)
+iterations = range(2, 18 + 1) if n == 3 else range(2, 6+1)
 
 for iter_cutoff in iterations:
 
@@ -382,111 +432,143 @@ for iter_cutoff in iterations:
             inner_greens.append(green_iter)
             inner_energies.append(energy_iter)
     
+#%%
 
-
-# %%
 w = np.linspace(-5.5,5.5,1000)-1e-1j
 
 # spin_greens_iter [iteration index] [spin up or spin down] [degenerate state index] [i,j]
 # spin_energies_iter [iteration index] [spin up or spin down] [degenerate state index]
 
-for i in range(len(iterations)):
-    plt.figure()
-    plt.title(f"Iteration {i+1}")
-    G00_1 = inner_greens[i][0][0][0][0](w)
-    G00_2 = inner_greens[i][0][1][0][0](w)
-    plt.plot(np.real(w),np.imag(G00_1+G00_2),label = f"inner")
-    G00_1 = analytic_greens[i][0][0][0][0](w)
-    G00_2 = analytic_greens[i][0][1][0][0](w)
-    plt.plot(np.real(w),np.imag(G00_1+G00_2)+0.5,  label = f"analytic")
-    plt.legend()
-    plt.savefig(f"tests/cluster/plots/five/iter_{i}.svg", format = "svg")
+for i in [16]:
+    for j in range(3):
+        for k in range(3):
+            plt.figure()
+            plt.title(f"Iteration {i+1}")
+            G00_1 = inner_greens[i][0][0][j][k](w)
+            G00_2 = inner_greens[i][0][1][j][k](w)
+            plt.plot(np.real(w),np.imag(G00_1+G00_2),label = f"inner")
+            G00_1 = analytic_greens[i][0][0][j][k](w)
+            G00_2 = analytic_greens[i][0][1][j][k](w)
+            plt.plot(np.real(w),np.imag(G00_1+G00_2),  label = f"analytic")
+            plt.legend()
+            # if n == 5:
+            #     plt.savefig(f"tests/cluster/plots/five/iter_{i}.svg", format = "svg")
+            # else:
+            #     plt.savefig(f"tests/cluster/plots/three/iter_{i}.svg", format = "svg")
+            plt.show()
+            plt.close()
 
 #%%
+
 iters = list(iterations)
 
 spin_labels = ["up", "down"]
+GS_labels = ["GS1","GS2"]
 
-analytic_spin_sum = np.zeros(len(iters), dtype=float)
-inner_spin_sum = np.zeros(len(iters), dtype=float)
 
-plt.figure(figsize=(8, 5))
-
-for spin_idx, spin_label in enumerate(spin_labels):
-
-    # Average over degenerate GS sectors, do NOT sum them.
-    analytic_vals = [
-        (
-            analytic_energies[k][spin_idx][0]
-            + analytic_energies[k][spin_idx][1]
-        )
-        for k in range(len(iters))
-    ]
-
-    inner_vals = [
-        (
-            inner_energies[k][spin_idx][0]
-            + inner_energies[k][spin_idx][1]
-        )
-        for k in range(len(iters))
-    ]
-
-    analytic_vals = np.asarray(analytic_vals).real
-    inner_vals = np.asarray(inner_vals).real
-
-    # Physical spin sum: up + down.
-    analytic_spin_sum += analytic_vals
-    inner_spin_sum += inner_vals
-
-    plt.plot(
-        iters,
-        analytic_vals,
-        marker="o",
-        linestyle="-",
-        label=f"analytic {spin_label}, GS avg",
-    )
-
-    plt.plot(
-        iters,
-        inner_vals,
-        marker="x",
-        linestyle="--",
-        label=f"inner {spin_label}, GS avg",
-    )
-
-plt.plot(
-    iters,
-    analytic_spin_sum*0.5,
-    marker="o",
-    linestyle="-",
-    linewidth=3,
-    label="analytic up + down, GS avg",
-)
-
-plt.plot(
-    iters,
-    inner_spin_sum*0.5,
-    marker="x",
-    linestyle="--",
-    linewidth=3,
-    label="inner up + down, GS avg",
-)
+plt.figure()
+analytical_plots = []
+inner_plots = []
+for i, spin_idx in enumerate(spin_labels):
+    for j, GS_idx in enumerate(GS_labels):
+        y_axis_analytical = [analytic_energies[k][i][j] for k in range(len(iters))]
+        y_axis_inner = [analytic_energies[k][i][j] for k in range(len(iters))]
+        analytical_plots.append(y_axis_analytical)
+        inner_plots.append(y_axis_inner)
+        plt.plot(iters,y_axis_analytical, label = "matrix_" + GS_idx+"_"+spin_idx)
+        #plt.plot(iters,y_axis_inner, label = "inner_" +GS_idx+"_"+spin_idx)
+        print("matrix_" + GS_idx+"_"+spin_idx, y_axis_inner[-1])
 
 plt.plot(
     iters,
     [true_gs_energy] * len(iters),
-    color="black",
+    color="red",
     linestyle=":",
-    label="exact",
+    label="exact diagonalization",
+)
+print("True ground state energy:", true_gs_energy)
+
+plt.plot(
+    iters,
+    [job_result] * len(iters),
+    color="black",
+    linestyle="-",
+    label="VQE expectation value",
 )
 
 plt.xlabel("Lanczos iteration cutoff")
 plt.ylabel("Galitskii-Migdal energy")
-plt.title("Energy convergence: analytic vs inner Green's functions")
 plt.xticks(iters)
 plt.legend()
 plt.grid(True, alpha=0.3)
 plt.tight_layout()
-plt.savefig(f"tests/cluster/plots/five/energy.svg", format = "svg")
+# if n == 5:
+#     plt.savefig(f"tests/cluster/plots/five/energy.svg", format = "svg")
+# else:
+#     plt.savefig(f"tests/cluster/plots/three/energy.svg", format = "svg")
+plt.show()
+plt.close()
 
+# %%
+
+def gm_parts(G_full, n):
+    hopping = np.diag(np.ones(n - 1), 1) + np.diag(np.ones(n - 1), -1)
+    h_mu = 2 * np.eye(n)
+    h_0 = -hopping - h_mu
+
+    def fermi(w):
+        return w <= 0.0
+
+    Kq = 0.0 + 0.0j
+    Kq_terms = np.zeros((n, n), dtype=complex)
+
+    for i in range(n):
+        for j in range(n):
+            g = G_full[j, i]
+            if not hasattr(g, "integrate"):
+                g = g.to_Lehmann()
+
+            val = g.integrate(lambda w: fermi(w))
+            Kq_terms[i, j] = h_0[i, j] * val
+            Kq += Kq_terms[i, j]
+
+    wG = 0.0 + 0.0j
+    wG_terms = np.zeros(n, dtype=complex)
+
+    for i in range(n):
+        g = G_full[i, i]
+        if not hasattr(g, "integrate"):
+            g = g.to_Lehmann()
+
+        val = g.integrate(lambda w: w * fermi(w))
+        wG_terms[i] = val
+        wG += val
+
+    E = 0.5 * (Kq + wG).real
+
+    return E, Kq, wG, Kq_terms, wG_terms
+
+
+G_A = analytic_greens[-1][0][0]  # GS1 up
+G_B = analytic_greens[-1][1][1]  # GS2 down
+
+EA, KqA, wGA, KtermsA, wtermsA = gm_parts(G_A, n)
+EB, KqB, wGB, KtermsB, wtermsB = gm_parts(G_B, n)
+
+print("EA", EA)
+print("EB", EB)
+print("Kq diff", KqA - KqB)
+print("wG diff", wGA - wGB)
+
+print("Kq term diffs")
+print(KtermsA - KtermsB)
+
+print("wG term diffs")
+print(wtermsA - wtermsB)
+# %%
+for pair in [((0,1),(1,0)), ((1,2),(2,1)), ((0,1),(1,2))]:
+    a, b = pair
+    IA = G_A[a].integrate(lambda w: w <= 0.0)
+    IB = G_A[b].integrate(lambda w: w <= 0.0)
+    print(pair, IA, IB, IA - IB)
 # %%

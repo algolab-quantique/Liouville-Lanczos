@@ -32,7 +32,7 @@ def hubbard(hop=np.array([[0, 1], [1, 0]]), u=4, mu=None):
     return MAPPER.map(-hopping + u * interaction - mu * occupation)
 
 
-n = 6
+n = 3
 u = 4
 mu = u/2
 max_iter = None

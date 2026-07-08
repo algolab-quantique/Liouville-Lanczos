@@ -92,7 +92,7 @@ def hubbard(hop=np.array([[0, 1], [1, 0]]), u=4, mu=None):
 
 
 hopping = np.diag(np.ones(3 - 1), 1) + np.diag(np.ones(3 - 1), -1)
-hamiltonian = hubbard(hopping, 4, mu=2)     #|up, up, up, up, up, down, down, down, down, down>
+hamiltonian = hubbard(hopping, 4, mu=2)     #|up, up, up, down, down, down>
 
 eigvals, eigvecs = np.linalg.eigh(hamiltonian.to_matrix())
 
@@ -101,7 +101,7 @@ true_gs_vector = eigvecs[:, 0]
 degen_gs_vectors = eigvecs[:, (eigvals - eigvals.min()) < 1e-9].T
 
 c_fermi_down = [to_sparse_pauli(FermionicOp({f"-_{i+3}": 1}, num_spin_orbitals=2 * 3)) for i in range(3)]
-c_fermi_up = [to_sparse_pauli(FermionicOp({f"+_{i+3}": 1}, num_spin_orbitals=2 * 3)) for i in range(3)]
+c_fermi_up = [to_sparse_pauli(FermionicOp({f"+_{i}": 1}, num_spin_orbitals=2 * 3)) for i in range(3)]
 opset = ["0-12", "1-"]
 
 
