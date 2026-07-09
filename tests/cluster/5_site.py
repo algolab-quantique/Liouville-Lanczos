@@ -114,14 +114,28 @@ true_gs_energy = eigvals[0]
 true_gs_vector = eigvecs[:, 0]
 degen_gs_vectors = eigvecs[:, (eigvals - eigvals.min()) < 1e-9].T
 
-c_fermi_down = [to_sparse_pauli(FermionicOp({f"-_{i+5}": 1}, num_spin_orbitals=2 * 5)) for i in range(5)]
-c_fermi_up = [to_sparse_pauli(FermionicOp({f"+_{i+5}": 1}, num_spin_orbitals=2 * 5)) for i in range(5)]
+def annihilation_operators(n = 5):
+    MAPPER = JordanWignerMapper()
+    c_fermi_list = [
+        FermionicOp({f"-_{i}": 1}, num_spin_orbitals=2 * n) for i in range(n)
+    ]
+    return [MAPPER.map(c) for c in c_fermi_list]
+
+def annihilation_operators_down(n = 5):
+    MAPPER = JordanWignerMapper()
+    c_fermi_list = [
+        FermionicOp({f"-_{i+n}": 1}, num_spin_orbitals=2 * n) for i in range(n)
+    ]
+    return [MAPPER.map(c) for c in c_fermi_list]
+
 opset = ["0-1234","1-23","2-"]
 
 USE_IBM_BACKEND = False
 
 #%%
 if not USE_IBM_BACKEND and True:
+    c_fermi_up = annihilation_operators_down()
+    c_fermi_down = annihilation_operators()
     for i , c_fermi in enumerate([c_fermi_up, c_fermi_down]):
         fold = "matrix_up_five" if i == 0 else "matrix_down_five"
         for j, GS in enumerate(degen_gs_vectors):
@@ -168,7 +182,6 @@ if USE_IBM_BACKEND:
     print(ibm_backend.num_qubits)
     GS1_run = pm.run(GS1)
     GS2_run = pm.run(GS2)
-
 else:
     ibm_backend = None
     pm = None

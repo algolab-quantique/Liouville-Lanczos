@@ -103,7 +103,7 @@ def read(folder, degen, id, analytic:bool, site:str = "five"):
     input_folder = base_folder / "results"
 
     # Build the exact CSV filename.
-    input_file = input_folder/ "best" / f"{degen}_{id}_{inner}_{folder}_{site}.csv"
+    input_file = input_folder / "best" / f"{degen}_{id}_{inner}_{folder}_{site}.csv"
     # Check that the file exists before reading.
     if not input_file.exists():
         raise FileNotFoundError(f"Could not find file: {input_file}")
@@ -341,234 +341,195 @@ def gm(G_full, n = 5):
 
 #%%
 
-n = 3
+for n in [3,5]:
 
-hopping = np.diag(np.ones(n - 1), 1) + np.diag(np.ones(n - 1), -1)
-hamiltonian = hubbard(hopping, 4, mu=2)     #|up, up, up, up, up, down, down, down, down, down>
+    hopping = np.diag(np.ones(n - 1), 1) + np.diag(np.ones(n - 1), -1)
+    hamiltonian = hubbard(hopping, 4, mu=2)     #|up, up, up, up, up, down, down, down, down, down>
 
-eigvals, eigvecs = np.linalg.eigh(hamiltonian.to_matrix())
+    eigvals, eigvecs = np.linalg.eigh(hamiltonian.to_matrix())
 
-true_gs_energy = eigvals[0]
+    true_gs_energy = eigvals[0]
 
-H = to_sparse_pauli(hamiltonian)
+    H = to_sparse_pauli(hamiltonian)
 
-estimator = StatevectorEstimator()
-if n == 5:
-    job = estimator.run([(vqe_hubbard_5sites,H)])
-else:
-    job = estimator.run([(vqe_hubbard_3sites,H)])
+    estimator = StatevectorEstimator()
+    if n == 5:
+        job = estimator.run([(vqe_hubbard_5sites,H)])
+    else:
+        job = estimator.run([(vqe_hubbard_3sites,H)])
 
-job_result = job.result()[0].data.evs
+    job_result = job.result()[0].data.evs
 
-opset = ["0-1234","1-23","2-"] if n == 5 else ["0-12", "1-"]
-analytic_greens = []
-analytic_energies = []
-inner_greens = []
-inner_energies = []
-iterations = range(2, 18 + 1) if n == 3 else range(2, 6+1)
+    opset = ["0-1234","1-23","2-"] if n == 5 else ["0-12", "1-"]
+    analytic_greens = []
+    analytic_energies = []
+    inner_greens = []
+    inner_energies = []
+    iterations = range(2, 18 + 1) if n == 3 else range(2, 6+1)
 
-for iter_cutoff in iterations:
+    for iter_cutoff in iterations:
 
-    for analytic in [True, False]:
+        for analytic in [True, False]:
 
-        green_iter = []
-        energy_iter = []
+            green_iter = []
+            energy_iter = []
 
-        for c_fermi in ["up", "down"]:
+            for c_fermi in ["up", "down"]:
 
-            spin_greens = []
-            spin_energies = []
+                spin_greens = []
+                spin_energies = []
 
-            for GS in range(2):
+                for GS in range(2):
 
-                G = np.empty((n, n), dtype=object)
-                G[:, :] = None
+                    G = np.empty((n, n), dtype=object)
+                    G[:, :] = None
 
-                for op in opset:
-                    main_i, other_i = op.split("-")
-                    row_idx = int(main_i)
+                    for op in opset:
+                        main_i, other_i = op.split("-")
+                        row_idx = int(main_i)
 
-                    alpha, beta, mm = read(
-                        c_fermi,
-                        degen=GS,
-                        id=row_idx,
-                        analytic=analytic,
-                        site="five" if n == 5 else "three",
-                    )
-
-                    alpha = np.asarray(alpha[:iter_cutoff])
-                    beta = np.asarray(beta[:iter_cutoff])
-                    mm = np.asarray(mm[:iter_cutoff, :])
-
-                    g = CF_Green(alpha, beta)
-                    G[row_idx, row_idx] = g
-
-                    g_lehmann = g.to_Lehmann()
-
-                    for moment_index, j_char in enumerate(other_i):
-                        col_idx = int(j_char)
-
-                        G_ij = PolyLehmann_Green(
-                            alpha,
-                            beta,
-                            mm[:, moment_index],
-                            g_lehmann,
+                        alpha, beta, mm = read(
+                            c_fermi,
+                            degen=GS,
+                            id=row_idx,
+                            analytic=analytic,
+                            site="five" if n == 5 else "three",
                         )
 
-                        G[row_idx, col_idx] = G_ij
+                        alpha = np.asarray(alpha[:iter_cutoff])
+                        beta = np.asarray(beta[:iter_cutoff])
+                        mm = np.asarray(mm[:iter_cutoff, :])
 
-                G = rebuild_matrix_five(G) if len(opset[0].split("-")[1]) == 4 else rebuild_matrix_three(G)
+                        g = CF_Green(alpha, beta)
+                        G[row_idx, row_idx] = g
 
-                spin_greens.append(G)
-                spin_energies.append(gm(G, n = n))
+                        g_lehmann = g.to_Lehmann()
 
-            green_iter.append(spin_greens)
-            energy_iter.append(spin_energies)
+                        for moment_index, j_char in enumerate(other_i):
+                            col_idx = int(j_char)
 
-        if analytic:
-            analytic_greens.append(green_iter)
-            analytic_energies.append(energy_iter)
-        else:
-            inner_greens.append(green_iter)
-            inner_energies.append(energy_iter)
+                            G_ij = PolyLehmann_Green(
+                                alpha,
+                                beta,
+                                mm[:, moment_index],
+                                g_lehmann,
+                            )
+
+                            G[row_idx, col_idx] = G_ij
+
+                    G = rebuild_matrix_five(G) if len(opset[0].split("-")[1]) == 4 else rebuild_matrix_three(G)
+
+                    spin_greens.append(G)
+                    spin_energies.append(gm(G, n = n))
+
+                green_iter.append(spin_greens)
+                energy_iter.append(spin_energies)
+
+            if analytic:
+                analytic_greens.append(green_iter)
+                analytic_energies.append(energy_iter)
+            else:
+                inner_greens.append(green_iter)
+                inner_energies.append(energy_iter)
+        
+    #%%
+
+    w = np.linspace(-5.5,5.5,1000)-1e-1j
+
+    # spin_greens_iter [iteration index] [spin up or spin down] [degenerate state index] [i,j]
+    # spin_energies_iter [iteration index] [spin up or spin down] [degenerate state index]
+
     
-#%%
-
-w = np.linspace(-5.5,5.5,1000)-1e-1j
-
-# spin_greens_iter [iteration index] [spin up or spin down] [degenerate state index] [i,j]
-# spin_energies_iter [iteration index] [spin up or spin down] [degenerate state index]
-
-for i in [16]:
-    for j in range(3):
-        for k in range(3):
+    for j in range(n):
+        for k in range(n):
             plt.figure()
-            plt.title(f"Iteration {i+1}")
-            G00_1 = inner_greens[i][0][0][j][k](w)
-            G00_2 = inner_greens[i][0][1][j][k](w)
+            plt.title(f"G_{j}{k}")
+            G00_1 = inner_greens[-1][0][0][j][k](w)
+            G00_2 = inner_greens[-1][0][1][j][k](w)
             plt.plot(np.real(w),np.imag(G00_1+G00_2),label = f"inner")
-            G00_1 = analytic_greens[i][0][0][j][k](w)
-            G00_2 = analytic_greens[i][0][1][j][k](w)
+            G00_1 = analytic_greens[-1][0][0][j][k](w)
+            G00_2 = analytic_greens[-1][0][1][j][k](w)
             plt.plot(np.real(w),np.imag(G00_1+G00_2),  label = f"analytic")
             plt.legend()
-            # if n == 5:
-            #     plt.savefig(f"tests/cluster/plots/five/iter_{i}.svg", format = "svg")
-            # else:
-            #     plt.savefig(f"tests/cluster/plots/three/iter_{i}.svg", format = "svg")
-            plt.show()
+            if n == 5:
+                plt.savefig(f"tests/cluster/plots/five/G_{j}{k}.svg", format = "svg")
+            else:
+                plt.savefig(f"tests/cluster/plots/three/G_{j}{k}.svg", format = "svg")
             plt.close()
 
-#%%
+    #%%
 
-iters = list(iterations)
+    iters = list(iterations)
 
-spin_labels = ["up", "down"]
-GS_labels = ["GS1","GS2"]
-
-
-plt.figure()
-analytical_plots = []
-inner_plots = []
-for i, spin_idx in enumerate(spin_labels):
-    for j, GS_idx in enumerate(GS_labels):
-        y_axis_analytical = [analytic_energies[k][i][j] for k in range(len(iters))]
-        y_axis_inner = [analytic_energies[k][i][j] for k in range(len(iters))]
-        analytical_plots.append(y_axis_analytical)
-        inner_plots.append(y_axis_inner)
-        plt.plot(iters,y_axis_analytical, label = "matrix_" + GS_idx+"_"+spin_idx)
-        #plt.plot(iters,y_axis_inner, label = "inner_" +GS_idx+"_"+spin_idx)
-        print("matrix_" + GS_idx+"_"+spin_idx, y_axis_inner[-1])
-
-plt.plot(
-    iters,
-    [true_gs_energy] * len(iters),
-    color="red",
-    linestyle=":",
-    label="exact diagonalization",
-)
-print("True ground state energy:", true_gs_energy)
-
-plt.plot(
-    iters,
-    [job_result] * len(iters),
-    color="black",
-    linestyle="-",
-    label="VQE expectation value",
-)
-
-plt.xlabel("Lanczos iteration cutoff")
-plt.ylabel("Galitskii-Migdal energy")
-plt.xticks(iters)
-plt.legend()
-plt.grid(True, alpha=0.3)
-plt.tight_layout()
-# if n == 5:
-#     plt.savefig(f"tests/cluster/plots/five/energy.svg", format = "svg")
-# else:
-#     plt.savefig(f"tests/cluster/plots/three/energy.svg", format = "svg")
-plt.show()
-plt.close()
-
-# %%
-
-def gm_parts(G_full, n):
-    hopping = np.diag(np.ones(n - 1), 1) + np.diag(np.ones(n - 1), -1)
-    h_mu = 2 * np.eye(n)
-    h_0 = -hopping - h_mu
-
-    def fermi(w):
-        return w <= 0.0
-
-    Kq = 0.0 + 0.0j
-    Kq_terms = np.zeros((n, n), dtype=complex)
-
-    for i in range(n):
-        for j in range(n):
-            g = G_full[j, i]
-            if not hasattr(g, "integrate"):
-                g = g.to_Lehmann()
-
-            val = g.integrate(lambda w: fermi(w))
-            Kq_terms[i, j] = h_0[i, j] * val
-            Kq += Kq_terms[i, j]
-
-    wG = 0.0 + 0.0j
-    wG_terms = np.zeros(n, dtype=complex)
-
-    for i in range(n):
-        g = G_full[i, i]
-        if not hasattr(g, "integrate"):
-            g = g.to_Lehmann()
-
-        val = g.integrate(lambda w: w * fermi(w))
-        wG_terms[i] = val
-        wG += val
-
-    E = 0.5 * (Kq + wG).real
-
-    return E, Kq, wG, Kq_terms, wG_terms
+    spin_labels = ["up", "down"]
+    GS_labels = ["GS1","GS2"]
 
 
-G_A = analytic_greens[-1][0][0]  # GS1 up
-G_B = analytic_greens[-1][1][1]  # GS2 down
+    plt.figure()
 
-EA, KqA, wGA, KtermsA, wtermsA = gm_parts(G_A, n)
-EB, KqB, wGB, KtermsB, wtermsB = gm_parts(G_B, n)
+    gs_sums = {GS_idx: np.zeros(len(iters), dtype=float) for GS_idx in GS_labels}
 
-print("EA", EA)
-print("EB", EB)
-print("Kq diff", KqA - KqB)
-print("wG diff", wGA - wGB)
+    for i, spin_idx in enumerate(spin_labels):
+        for j, GS_idx in enumerate(GS_labels):
+            y_axis_analytical = np.array(
+                [analytic_energies[k][i][j] for k in range(len(iters))] 
+            ) * 0.5
+            y_axis_inner = np.array(
+                [inner_energies[k][i][j] for k in range(len(iters))] 
+            ) * 0.5
 
-print("Kq term diffs")
-print(KtermsA - KtermsB)
 
-print("wG term diffs")
-print(wtermsA - wtermsB)
-# %%
-for pair in [((0,1),(1,0)), ((1,2),(2,1)), ((0,1),(1,2))]:
-    a, b = pair
-    IA = G_A[a].integrate(lambda w: w <= 0.0)
-    IB = G_A[b].integrate(lambda w: w <= 0.0)
-    print(pair, IA, IB, IA - IB)
-# %%
+            gs_sums[GS_idx] += y_axis_analytical
+
+    # Plot the two GS sums
+    plt.plot(
+        iters,
+        gs_sums["GS1"],
+        label="mean_" + GS_labels[0],
+        
+    )
+    plt.plot(
+        iters,
+        gs_sums["GS2"],
+        label="mean_" + GS_labels[1],
+        
+    )
+
+    # Plot sum of the two GS sums
+    total_gs_sum = sum(gs_sums.values())
+
+    plt.plot(
+        iters,
+        total_gs_sum ,
+        label="sum_spin",
+    )
+
+    plt.plot(
+        iters,
+        [true_gs_energy] * len(iters),
+        color="red",
+        linestyle=":",
+        label="exact diagonalization",
+    )
+
+    plt.plot(
+        iters,
+        [job_result] * len(iters),
+        color="black",
+        linestyle=":",
+        label="VQE expectation value",
+    )
+
+    plt.xlabel("Lanczos iteration cutoff")
+    plt.ylabel("Galitskii-Migdal energy")
+    plt.xticks(iters)
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+
+    if n == 5:
+        plt.savefig(f"tests/cluster/plots/five/energy.svg", format = "svg")
+    else:
+        plt.savefig(f"tests/cluster/plots/three/energy.svg", format = "svg")
+    
+    plt.close()
