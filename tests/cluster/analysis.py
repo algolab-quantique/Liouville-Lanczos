@@ -103,7 +103,7 @@ def read(folder, degen, id, analytic:bool, site:str = "five"):
     input_folder = base_folder / "results"
 
     # Build the exact CSV filename.
-    input_file = input_folder / "best" / f"{degen}_{id}_{inner}_{folder}_{site}.csv"
+    input_file = input_folder / f"{degen}_{id}_{inner}_{folder}_{site}.csv"
     # Check that the file exists before reading.
     if not input_file.exists():
         raise FileNotFoundError(f"Could not find file: {input_file}")
@@ -341,7 +341,7 @@ def gm(G_full, n = 5):
 
 #%%
 
-for n in [3,5]:
+for n in [3]: # if 5_site is also in the result folder add 5 for the plotting to run both
 
     hopping = np.diag(np.ones(n - 1), 1) + np.diag(np.ones(n - 1), -1)
     hamiltonian = hubbard(hopping, 4, mu=2)     #|up, up, up, up, up, down, down, down, down, down>

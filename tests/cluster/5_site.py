@@ -9,9 +9,11 @@ from qiskit_nature.second_q.mappers import JordanWignerMapper
 from qiskit.quantum_info import SparsePauliOp
 from qiskit.circuit.library import UnitaryGate
 from qiskit.circuit.library import real_amplitudes
+from qiskit_ibm_runtime import QiskitRuntimeService, Session, EstimatorV2
+from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 # %%
 
-kmax = 6
+kmax = 4
 eps = 1e-9
 
 def apply_adjacent_fswap_permutation(qc):
@@ -130,12 +132,13 @@ def annihilation_operators_down(n = 5):
 
 opset = ["0-1234","1-23","2-"]
 
-USE_IBM_BACKEND = False
+USE_IBM_BACKEND = True
+
+c_fermi_up = annihilation_operators_down()
+c_fermi_down = annihilation_operators()
 
 #%%
-if not USE_IBM_BACKEND and True:
-    c_fermi_up = annihilation_operators_down()
-    c_fermi_down = annihilation_operators()
+if not USE_IBM_BACKEND and True:    
     for i , c_fermi in enumerate([c_fermi_up, c_fermi_down]):
         fold = "matrix_up_five" if i == 0 else "matrix_down_five"
         for j, GS in enumerate(degen_gs_vectors):
@@ -150,36 +153,21 @@ if not USE_IBM_BACKEND and True:
 
 #%%
 
-
 GS1 = vqe_hubbard_5sites.copy()
 GS2 = GS1.copy()
 apply_adjacent_fswap_permutation(GS2)
 
 if USE_IBM_BACKEND:
-    from qiskit_ibm_runtime import QiskitRuntimeService, EstimatorV2 as IBMEstimatorV2
-    from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
-
     service = QiskitRuntimeService()
 
-    ibm_backend = service.least_busy(
-        operational=True,
-        simulator=False,
-        min_num_qubits=vqe_hubbard_5sites.num_qubits,
-    )
+    backend = service.backend("ibm_quebec")
 
-    print(f"Using IBM backend: {ibm_backend.name}")
+    print(f"Using IBM backend: {backend.name}")
 
     pm = generate_preset_pass_manager(
-        backend=ibm_backend,
+        backend=backend,
         optimization_level=1,
     )
-
-    estimator = IBMEstimatorV2(mode=ibm_backend)
-    estimator.options.resilience_level = 1
-    estimator.options.default_precision = 0.03
-    print(service.active_account())
-    print(ibm_backend.name)
-    print(ibm_backend.num_qubits)
     GS1_run = pm.run(GS1)
     GS2_run = pm.run(GS2)
 else:
@@ -189,18 +177,27 @@ else:
     GS1_run = GS1
     GS2_run = GS2
 
+def run():
+    for i , c_fermi in enumerate([c_fermi_up, c_fermi_down]):
+        fold = "inner_up_five" if i == 0 else "inner_down_five"
+        for j, GS in enumerate([GS1_run,GS2_run]):
+            lanczos = LCZ(inner_product_spo(GS,estimator,eps),Liouvillian_spo(eps),sum_spo(eps), folder = fold, degen = j)
+            for op in opset:
+                main_i, other_i = op.split("-")
+                idx = int(main_i)
+                main_op = c_fermi[idx]
+                other_ops = [c_fermi[int(k)] for k in other_i]
+                lanczos.polynomial_hybrid(hamiltonian ,main_op ,[o for o in other_ops],kmax)
+                del main_i, other_i, idx, main_op, other_ops
+
 #%%
-for i , c_fermi in enumerate([c_fermi_up, c_fermi_down]):
-    fold = "inner_up_five" if i == 0 else "inner_down_five"
-    for j, GS in enumerate([GS1,GS2]):
-        lanczos = LCZ(inner_product_spo(GS,estimator,eps),Liouvillian_spo(eps),sum_spo(eps), folder = fold, degen = j)
-        for op in opset:
-            main_i, other_i = op.split("-")
-            idx = int(main_i)
-            main_op = c_fermi[idx]
-            other_ops = [c_fermi[int(k)] for k in other_i]
-            lanczos.polynomial_hybrid(hamiltonian ,main_op ,[o for o in other_ops],kmax)
-            del main_i, other_i, idx, main_op, other_ops
+with Session(backend=backend, max_time="8h") as session:
+    estimator = EstimatorV2(mode=session)
+    try:
+        run()
+    finally:
+        session.close()
+
 
 
 # %%
