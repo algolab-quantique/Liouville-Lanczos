@@ -1,0 +1,92 @@
+{
+  "job_id": "d9kcrr3hdfks73cjg6o0",
+  "status": "DONE",
+  "session_id": "a5651070-609b-4600-9a19-41b95c26cef5",
+  "backend": "ibm_quebec",
+  "primitive_id": "estimator",
+  "creation_date": "2026-07-28 11:42:36.555073-04:00",
+  "instance": "crn:v1:bluemix:public:quantum-computing:us-east:a/d2c50f33c43a44abb94280706332351d:da833d51-90f6-4a7d-a5e5-b872bad68bde::",
+  "tags": null,
+  "runtime_image": null,
+  "usage_estimation": {
+    "quantum_seconds": 12.64854052
+  },
+  "metrics": {
+    "caller": "qiskit_ibm_runtime~estimator.py",
+    "qiskit_version": "qiskit_ibm_runtime-0.47.0,qiskit-2.3.1*,qiskit_aer-0.17.2",
+    "timestamps": {
+      "created": "2026-07-28T15:42:36.555073Z",
+      "finished": "2026-07-28T15:42:57.198273Z",
+      "running": "2026-07-28T15:42:37.50854Z"
+    },
+    "bss": {
+      "seconds": 12
+    },
+    "usage": {
+      "quantum_seconds": 12,
+      "seconds": 12,
+      "status": "complete"
+    }
+  },
+  "inputs": {
+    "options": {},
+    "pubs": [
+      [
+        {
+          "name": "RealAmplitudes-48"
+        },
+        {
+          "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII": 0.006556033727200596,
+          "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIZI": -0.13284092785245255,
+          "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIZII": -0.13284092785245255,
+          "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIZIII": -0.13284092785245255
+        },
+        [],
+        null
+      ]
+    ],
+    "support_qiskit": true,
+    "version": 2
+  },
+  "logs": "",
+  "result_metadata": {
+    "dynamical_decoupling": {
+      "enable": false,
+      "sequence_type": "XX",
+      "extra_slack_distribution": "middle",
+      "scheduling_method": "alap"
+    },
+    "twirling": {
+      "enable_gates": false,
+      "enable_measure": true,
+      "num_randomizations": "auto",
+      "shots_per_randomization": "auto",
+      "interleave_randomizations": true,
+      "strategy": "active-accum"
+    },
+    "resilience": {
+      "measure_mitigation": true,
+      "zne_mitigation": false,
+      "pec_mitigation": false
+    },
+    "version": 2
+  },
+  "pub_results": [
+    {
+      "metadata": {
+        "shots": 4096,
+        "target_precision": 0.015625,
+        "circuit_metadata": {},
+        "resilience": {},
+        "num_randomizations": 32
+      },
+      "data": {
+        "evs": 0.008194996771295551,
+        "stds": 0.0043692115710843695,
+        "ensemble_standard_error": 0.0036339368719939392
+      },
+      "pub_index": 0
+    }
+  ],
+  "errors": {}
+}

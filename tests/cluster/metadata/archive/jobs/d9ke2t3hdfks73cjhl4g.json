@@ -1,0 +1,96 @@
+{
+  "job_id": "d9ke2t3hdfks73cjhl4g",
+  "status": "DONE",
+  "session_id": "a5651070-609b-4600-9a19-41b95c26cef5",
+  "backend": "ibm_quebec",
+  "primitive_id": "estimator",
+  "creation_date": "2026-07-28 13:05:57.011316-04:00",
+  "instance": "crn:v1:bluemix:public:quantum-computing:us-east:a/d2c50f33c43a44abb94280706332351d:da833d51-90f6-4a7d-a5e5-b872bad68bde::",
+  "tags": null,
+  "runtime_image": null,
+  "usage_estimation": {
+    "quantum_seconds": 16.305377202
+  },
+  "metrics": {
+    "caller": "qiskit_ibm_runtime~estimator.py",
+    "qiskit_version": "qiskit_ibm_runtime-0.47.0,qiskit-2.3.1*,qiskit_aer-0.17.2",
+    "timestamps": {
+      "created": "2026-07-28T17:05:57.011316Z",
+      "finished": "2026-07-28T17:06:23.416069Z",
+      "running": "2026-07-28T17:05:57.898277Z"
+    },
+    "bss": {
+      "seconds": 17
+    },
+    "usage": {
+      "quantum_seconds": 17,
+      "seconds": 17,
+      "status": "complete"
+    }
+  },
+  "inputs": {
+    "support_qiskit": true,
+    "version": 2,
+    "options": {},
+    "pubs": [
+      [
+        {
+          "name": "RealAmplitudes-48"
+        },
+        {
+          "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIXXIIIYY": 0.19964091957146857,
+          "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIYYIIIXX": 0.19964091957146857,
+          "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIYYIIIYY": 0.19964091957146857,
+          "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIZIIIIII": 0.017041444022677193,
+          "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIZZIIIII": -0.39928183914293713,
+          "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII": -0.1499244001335737,
+          "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIZIIIII": 0.017041444022677193,
+          "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIXXIIIXX": 0.19964091957146857
+        },
+        [],
+        null
+      ]
+    ]
+  },
+  "logs": "",
+  "result_metadata": {
+    "dynamical_decoupling": {
+      "enable": false,
+      "sequence_type": "XX",
+      "extra_slack_distribution": "middle",
+      "scheduling_method": "alap"
+    },
+    "twirling": {
+      "enable_gates": false,
+      "enable_measure": true,
+      "num_randomizations": "auto",
+      "shots_per_randomization": "auto",
+      "interleave_randomizations": true,
+      "strategy": "active-accum"
+    },
+    "resilience": {
+      "measure_mitigation": true,
+      "zne_mitigation": false,
+      "pec_mitigation": false
+    },
+    "version": 2
+  },
+  "pub_results": [
+    {
+      "metadata": {
+        "shots": 4096,
+        "target_precision": 0.015625,
+        "circuit_metadata": {},
+        "resilience": {},
+        "num_randomizations": 32
+      },
+      "data": {
+        "evs": -0.009238057995116475,
+        "stds": 0.008617508364784142,
+        "ensemble_standard_error": 0.008793549800896971
+      },
+      "pub_index": 0
+    }
+  ],
+  "errors": {}
+}

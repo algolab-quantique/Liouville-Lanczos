@@ -1,0 +1,89 @@
+{
+  "job_id": "d9kd0qjjf64c739i1dmg",
+  "status": "DONE",
+  "session_id": "a5651070-609b-4600-9a19-41b95c26cef5",
+  "backend": "ibm_quebec",
+  "primitive_id": "estimator",
+  "creation_date": "2026-07-28 11:53:14.692286-04:00",
+  "instance": "crn:v1:bluemix:public:quantum-computing:us-east:a/d2c50f33c43a44abb94280706332351d:da833d51-90f6-4a7d-a5e5-b872bad68bde::",
+  "tags": null,
+  "runtime_image": null,
+  "usage_estimation": {
+    "quantum_seconds": 12.64854052
+  },
+  "metrics": {
+    "caller": "qiskit_ibm_runtime~estimator.py",
+    "qiskit_version": "qiskit_ibm_runtime-0.47.0,qiskit-2.3.1*,qiskit_aer-0.17.2",
+    "timestamps": {
+      "created": "2026-07-28T15:53:14.692286Z",
+      "finished": "2026-07-28T15:53:36.243126Z",
+      "running": "2026-07-28T15:53:16.080285Z"
+    },
+    "bss": {
+      "seconds": 12
+    },
+    "usage": {
+      "quantum_seconds": 12,
+      "seconds": 12,
+      "status": "complete"
+    }
+  },
+  "inputs": {
+    "version": 2,
+    "options": {},
+    "pubs": [
+      [
+        {
+          "name": "RealAmplitudes-48"
+        },
+        {
+          "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII": 1
+        },
+        [],
+        null
+      ]
+    ],
+    "support_qiskit": true
+  },
+  "logs": "",
+  "result_metadata": {
+    "dynamical_decoupling": {
+      "enable": false,
+      "sequence_type": "XX",
+      "extra_slack_distribution": "middle",
+      "scheduling_method": "alap"
+    },
+    "twirling": {
+      "enable_gates": false,
+      "enable_measure": true,
+      "num_randomizations": "auto",
+      "shots_per_randomization": "auto",
+      "interleave_randomizations": true,
+      "strategy": "active-accum"
+    },
+    "resilience": {
+      "measure_mitigation": true,
+      "zne_mitigation": false,
+      "pec_mitigation": false
+    },
+    "version": 2
+  },
+  "pub_results": [
+    {
+      "metadata": {
+        "shots": 4096,
+        "target_precision": 0.015625,
+        "circuit_metadata": {},
+        "resilience": {},
+        "num_randomizations": 32
+      },
+      "data": {
+        "evs": 1.0,
+        "stds": 0.0,
+        "ensemble_standard_error": 0.0
+      },
+      "pub_index": 0
+    }
+  ],
+  "errors": {}
+}

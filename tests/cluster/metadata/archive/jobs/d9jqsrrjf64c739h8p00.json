@@ -1,0 +1,91 @@
+{
+  "job_id": "d9jqsrrjf64c739h8p00",
+  "status": "DONE",
+  "session_id": "180d4814-6213-4558-bff4-1239cbef37e4",
+  "backend": "ibm_quebec",
+  "primitive_id": "estimator",
+  "creation_date": "2026-07-27 15:15:59.326567-04:00",
+  "instance": "crn:v1:bluemix:public:quantum-computing:us-east:a/d2c50f33c43a44abb94280706332351d:da833d51-90f6-4a7d-a5e5-b872bad68bde::",
+  "tags": null,
+  "runtime_image": null,
+  "usage_estimation": {
+    "quantum_seconds": null
+  },
+  "metrics": {
+    "caller": "qiskit_ibm_runtime~estimator.py",
+    "qiskit_version": "qiskit_ibm_runtime-0.47.0,qiskit-2.3.1*,qiskit_aer-0.17.2",
+    "timestamps": {
+      "created": "2026-07-27T19:15:59.326567Z",
+      "finished": "2026-07-27T19:16:20.023743Z",
+      "running": "2026-07-27T19:16:00.455689Z"
+    },
+    "bss": {
+      "seconds": 12
+    },
+    "usage": {
+      "quantum_seconds": 12,
+      "seconds": 12,
+      "status": "complete"
+    }
+  },
+  "inputs": {
+    "version": 2,
+    "options": {},
+    "pubs": [
+      [
+        {
+          "name": "RealAmplitudes-48"
+        },
+        {
+          "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII": -0.014292908419592073,
+          "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIZIII": 0.4849167388510408,
+          "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIZIIII": 0.4849167388510408
+        },
+        [],
+        null
+      ]
+    ],
+    "support_qiskit": true
+  },
+  "logs": "",
+  "result_metadata": {
+    "dynamical_decoupling": {
+      "enable": false,
+      "sequence_type": "XX",
+      "extra_slack_distribution": "middle",
+      "scheduling_method": "alap"
+    },
+    "twirling": {
+      "enable_gates": false,
+      "enable_measure": true,
+      "num_randomizations": "auto",
+      "shots_per_randomization": "auto",
+      "interleave_randomizations": true,
+      "strategy": "active-accum"
+    },
+    "resilience": {
+      "measure_mitigation": true,
+      "zne_mitigation": false,
+      "pec_mitigation": false
+    },
+    "version": 2
+  },
+  "pub_results": [
+    {
+      "metadata": {
+        "shots": 4096,
+        "target_precision": 0.015625,
+        "circuit_metadata": {},
+        "resilience": {},
+        "num_randomizations": 32
+      },
+      "data": {
+        "evs": 6.463378764375114e-05,
+        "stds": 0.010212602165603808,
+        "ensemble_standard_error": 0.010821388259823737
+      },
+      "pub_index": 0
+    }
+  ],
+  "errors": {}
+}

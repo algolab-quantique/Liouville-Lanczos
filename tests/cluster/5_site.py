@@ -13,7 +13,7 @@ from qiskit_ibm_runtime import QiskitRuntimeService, Session, EstimatorV2
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 # %%
 
-kmax = 4
+kmax = 6
 eps = 1e-9
 
 def apply_adjacent_fswap_permutation(qc):
@@ -132,13 +132,13 @@ def annihilation_operators_down(n = 5):
 
 opset = ["0-1234","1-23","2-"]
 
-USE_IBM_BACKEND = True
+USE_IBM_BACKEND = False
 
 c_fermi_up = annihilation_operators_down()
 c_fermi_down = annihilation_operators()
 
 #%%
-if not USE_IBM_BACKEND and True:    
+if not USE_IBM_BACKEND:    
     for i , c_fermi in enumerate([c_fermi_up, c_fermi_down]):
         fold = "matrix_up_five" if i == 0 else "matrix_down_five"
         for j, GS in enumerate(degen_gs_vectors):
@@ -191,13 +191,15 @@ def run():
                 del main_i, other_i, idx, main_op, other_ops
 
 #%%
-with Session(backend=backend, max_time="8h") as session:
-    estimator = EstimatorV2(mode=session)
-    try:
-        run()
-    finally:
-        session.close()
-
+if USE_IBM_BACKEND:
+    with Session(backend=backend, max_time="8h") as session:
+        estimator = EstimatorV2(mode=session)
+        try:
+            run()
+        finally:
+            session.close()
+else:
+    run()
 
 
 # %%

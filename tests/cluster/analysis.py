@@ -95,12 +95,12 @@ def hubbard(hop=np.array([[0, 1], [1, 0]]), u=4, mu=None):
     
     return to_sparse_pauli(HH)
 
-def read(folder, degen, id, analytic:bool, site:str = "five"):
+def read(folder, degen, id, analytic:bool, site:str = "five", hardware: bool = False):
     # Find the folder where this Python file lives.
     base_folder = Path(__file__).resolve().parent
     inner = "matrix" if analytic else "inner"
     # Build the folder where the CSV files were written.
-    input_folder = base_folder / "results"
+    input_folder = base_folder / "results" if not hardware else base_folder / "results" / "hardware"
 
     # Build the exact CSV filename.
     input_file = input_folder / f"{degen}_{id}_{inner}_{folder}_{site}.csv"
@@ -337,11 +337,10 @@ def gm(G_full, n = 5):
     E_GM = 0.5 * (Kq + wG).real
     return E_GM
 
-
+hardware = True
 
 #%%
-
-for n in [3]: # if 5_site is also in the result folder add 5 for the plotting to run both
+for n in [3,5]: # if 5_site is also in the result folder add 5 for the plotting to run both
 
     hopping = np.diag(np.ones(n - 1), 1) + np.diag(np.ones(n - 1), -1)
     hamiltonian = hubbard(hopping, 4, mu=2)     #|up, up, up, up, up, down, down, down, down, down>
@@ -365,24 +364,43 @@ for n in [3]: # if 5_site is also in the result folder add 5 for the plotting to
     analytic_energies = []
     inner_greens = []
     inner_energies = []
+    hard_greens = []
+    hard_energies = []
     iterations = range(2, 18 + 1) if n == 3 else range(2, 6+1)
+    hardware_max_iter = 5 if n == 5 else 6
 
     for iter_cutoff in iterations:
-
+        
         for analytic in [True, False]:
 
             green_iter = []
             energy_iter = []
 
+            hard_iter_green = []
+            hard_iter_energy = []
+
+            use_hardware = (
+                        not analytic
+                        and hardware
+                        and iter_cutoff <= hardware_max_iter-1
+                    )
+            
             for c_fermi in ["up", "down"]:
 
                 spin_greens = []
                 spin_energies = []
 
+                hardware_green = []
+                hardware_energy = []
+
                 for GS in range(2):
 
                     G = np.empty((n, n), dtype=object)
                     G[:, :] = None
+
+                    if use_hardware:
+                        HG = np.empty((n, n), dtype=object)
+                        HG[:, :] = None
 
                     for op in opset:
                         main_i, other_i = op.split("-")
@@ -394,7 +412,33 @@ for n in [3]: # if 5_site is also in the result folder add 5 for the plotting to
                             id=row_idx,
                             analytic=analytic,
                             site="five" if n == 5 else "three",
+                            hardware= False
                         )
+                        if use_hardware:
+                            Halpha, Hbeta, Hmm = read(
+                                                        c_fermi,
+                                                        degen=GS,
+                                                        id=row_idx,
+                                                        analytic=analytic,
+                                                        site="five" if n == 5 else "three",
+                                                        hardware= True
+                                                    )
+                            # hardware_max_iter = min(
+                            #     len(Halpha),
+                            #     len(Hbeta),
+                            #     Hmm.shape[0],
+                            # )
+                            Halpha = np.asarray(Halpha[:iter_cutoff])
+                            Hbeta = np.asarray(Hbeta[:iter_cutoff])
+                            Hmm = np.asarray(Hmm[:iter_cutoff, :])
+
+                            Hg = CF_Green(Halpha, Hbeta)
+                            HG[row_idx, row_idx] = Hg
+                            Hg_lehmann = Hg.to_Lehmann()
+                            
+                            
+
+
 
                         alpha = np.asarray(alpha[:iter_cutoff])
                         beta = np.asarray(beta[:iter_cutoff])
@@ -414,16 +458,33 @@ for n in [3]: # if 5_site is also in the result folder add 5 for the plotting to
                                 mm[:, moment_index],
                                 g_lehmann,
                             )
-
                             G[row_idx, col_idx] = G_ij
+                            
+                            if use_hardware:
 
-                    G = rebuild_matrix_five(G) if len(opset[0].split("-")[1]) == 4 else rebuild_matrix_three(G)
+                                HG_ij = PolyLehmann_Green(
+                                    Halpha,
+                                    Hbeta,
+                                    Hmm[:, moment_index],
+                                    Hg_lehmann,
+                                )
+                                HG[row_idx, col_idx] = HG_ij
+
+                            G = rebuild_matrix_five(G) if len(opset[0].split("-")[1]) == 4 else rebuild_matrix_three(G)
+                            if use_hardware:
+                                HG = rebuild_matrix_five(HG) if len(opset[0].split("-")[1]) == 4 else rebuild_matrix_three(HG)
 
                     spin_greens.append(G)
                     spin_energies.append(gm(G, n = n))
+                    if use_hardware:
+                        hardware_energy.append(gm(HG,n = n))
+                        hardware_green.append(HG)
 
                 green_iter.append(spin_greens)
                 energy_iter.append(spin_energies)
+                if use_hardware:
+                    hard_iter_green.append(hardware_green)
+                    hard_iter_energy.append(hardware_energy)
 
             if analytic:
                 analytic_greens.append(green_iter)
@@ -431,44 +492,56 @@ for n in [3]: # if 5_site is also in the result folder add 5 for the plotting to
             else:
                 inner_greens.append(green_iter)
                 inner_energies.append(energy_iter)
-        
+                if use_hardware:
+                    hard_greens.append(hard_iter_green)
+                    hard_energies.append(hard_iter_energy)
+
+
     #%%
 
     w = np.linspace(-5.5,5.5,1000)-1e-1j
 
-    # spin_greens_iter [iteration index] [spin up or spin down] [degenerate state index] [i,j]
-    # spin_energies_iter [iteration index] [spin up or spin down] [degenerate state index]
-
     
+    plot_folder = (
+    Path("tests/cluster/plots/five")
+    if n == 5
+    else Path("tests/cluster/plots/three")
+    )
+
+    plot_folder.mkdir(parents=True, exist_ok=True)
+    iteration = len(hard_greens)-1
     for j in range(n):
         for k in range(n):
             plt.figure()
-            plt.title(f"G_{j}{k}")
-            G00_1 = inner_greens[-1][0][0][j][k](w)
-            G00_2 = inner_greens[-1][0][1][j][k](w)
+            plt.title(f"G_{j}{k} iteration:{iteration}", fontsize = 30)
+            # spin_greens_iter [iteration index] [spin up or spin down] [degenerate state index] [i,j]
+            # spin_energies_iter [iteration index] [spin up or spin down] [degenerate state index]
+            G00_1 = hard_greens[iteration][0][0][j][k](w)
+            G00_2 = hard_greens[iteration][0][1][j][k](w)
+            plt.plot(np.real(w),np.imag(G00_1+G00_2),label = f"hardware", linestyle = "--")
+            G00_1 = inner_greens[iteration][0][0][j][k](w)
+            G00_2 = inner_greens[iteration][0][1][j][k](w)
             plt.plot(np.real(w),np.imag(G00_1+G00_2),label = f"inner")
-            G00_1 = analytic_greens[-1][0][0][j][k](w)
-            G00_2 = analytic_greens[-1][0][1][j][k](w)
+            G00_1 = analytic_greens[iteration][0][0][j][k](w)
+            G00_2 = analytic_greens[iteration][0][1][j][k](w)
             plt.plot(np.real(w),np.imag(G00_1+G00_2),  label = f"analytic")
-            plt.legend()
-            if n == 5:
-                plt.savefig(f"tests/cluster/plots/five/G_{j}{k}.svg", format = "svg")
-            else:
-                plt.savefig(f"tests/cluster/plots/three/G_{j}{k}.svg", format = "svg")
+            plt.legend(fontsize = 24)
+            
+
+            #plt.show()
+            plt.savefig(plot_folder / f"G_{j}{k}.svg", format = "svg")
             plt.close()
 
-    #%%
+#%%
 
     iters = list(iterations)
-
+    hard_iters = iters[:len(hard_energies)]
     spin_labels = ["up", "down"]
     GS_labels = ["GS1","GS2"]
 
-
-    plt.figure()
-
-    gs_sums = {GS_idx: np.zeros(len(iters), dtype=float) for GS_idx in GS_labels}
-
+    gs_sums_analytical = {GS_idx: np.zeros(len(iters), dtype=float) for GS_idx in GS_labels}
+    gs_sums_inner = {GS_idx: np.zeros(len(iters), dtype=float) for GS_idx in GS_labels}
+    gs_sums_hard = {GS_idx: np.zeros(len(hard_iters), dtype=float) for GS_idx in GS_labels}
     for i, spin_idx in enumerate(spin_labels):
         for j, GS_idx in enumerate(GS_labels):
             y_axis_analytical = np.array(
@@ -477,32 +550,50 @@ for n in [3]: # if 5_site is also in the result folder add 5 for the plotting to
             y_axis_inner = np.array(
                 [inner_energies[k][i][j] for k in range(len(iters))] 
             ) * 0.5
+            y_axis_hard = np.array(
+                [hard_energies[k][i][j] for k in range(len(hard_iters))] 
+            ) * 0.5
 
 
-            gs_sums[GS_idx] += y_axis_analytical
+            gs_sums_analytical[GS_idx] += y_axis_analytical
+            gs_sums_inner[GS_idx] += y_axis_inner
+            gs_sums_hard[GS_idx] += y_axis_hard
 
-    # Plot the two GS sums
-    plt.plot(
-        iters,
-        gs_sums["GS1"],
-        label="mean_" + GS_labels[0],
-        
-    )
-    plt.plot(
-        iters,
-        gs_sums["GS2"],
-        label="mean_" + GS_labels[1],
-        
-    )
+    plt.figure()
 
-    # Plot sum of the two GS sums
-    total_gs_sum = sum(gs_sums.values())
+    datasets = [
+        ("analytic", iters, gs_sums_analytical, "red", "-"),
+        ("inner", iters, gs_sums_inner, "blue", "-"),
+        ("hardware", hard_iters, gs_sums_hard, "blue", "--"),
+    ]
 
-    plt.plot(
-        iters,
-        total_gs_sum ,
-        label="sum_spin",
-    )
+    for source, x_values, gs, color, style in datasets:
+
+        plt.plot(
+            x_values,
+            gs["GS1"],
+            label=f"{source}_GS1",
+            color = color,
+            linestyle = style
+        )
+
+        plt.plot(
+            x_values,
+            gs["GS2"],
+            label=f"{source}_GS2",
+            color = color,
+            linestyle = style
+        )
+
+        total_gs_sum = gs["GS1"] + gs["GS2"]
+
+        plt.plot(
+            x_values,
+            total_gs_sum,
+            label=f"{source}_total",
+            color = color,
+            linestyle = style
+        )
 
     plt.plot(
         iters,
@@ -514,22 +605,22 @@ for n in [3]: # if 5_site is also in the result folder add 5 for the plotting to
 
     plt.plot(
         iters,
-        [job_result] * len(iters),
+        [float(np.asarray(job_result).squeeze())] * len(iters),
         color="black",
         linestyle=":",
         label="VQE expectation value",
     )
 
-    plt.xlabel("Lanczos iteration cutoff")
-    plt.ylabel("Galitskii-Migdal energy")
+
+    plt.xlabel("Lanczos iteration cutoff", fontsize = 20)
+    plt.ylabel("Galitskii-Migdal energy", fontsize = 20)
     plt.xticks(iters)
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
 
-    if n == 5:
-        plt.savefig(f"tests/cluster/plots/five/energy.svg", format = "svg")
-    else:
-        plt.savefig(f"tests/cluster/plots/three/energy.svg", format = "svg")
     
+    plt.savefig(plot_folder / f"energy.svg", format = "svg")
     plt.close()
+
+# %%

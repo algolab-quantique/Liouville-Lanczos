@@ -212,7 +212,7 @@ def write(a,b,mi,folder, id, degen):
 
     base_folder = Path(__file__).resolve().parent
 
-    output_folder = base_folder / "results"  
+    output_folder = base_folder / "results" 
     output_folder.mkdir(parents=True, exist_ok=True)
     output_file = output_folder / f"{degen}_{int(id)}_{folder}.csv"
 

@@ -120,7 +120,7 @@ opset = ["0-12", "1-"]
 c_fermi_up = annihilation_operators_down()
 c_fermi_down = annihilation_operators()
 
-USE_IBM_BACKEND = True
+USE_IBM_BACKEND = False
 
 #%%
 if not USE_IBM_BACKEND:
@@ -179,15 +179,15 @@ def run():
                 other_ops = [c_fermi[int(k)] for k in other_i]
                 lanczos.polynomial_hybrid(hamiltonian ,main_op ,[o for o in other_ops],kmax)
 #%%
-with Session(backend=backend, max_time="5h") as session:
-    estimator = EstimatorV2(mode=session)
-    try:
-        run()
-    finally:
-        session.close()
-
-#%%
-run()
+if USE_IBM_BACKEND:
+    with Session(backend=backend, max_time="5h") as session:
+        estimator = EstimatorV2(mode=session)
+        try:
+            run()
+        finally:
+            session.close()
+else:
+    run()
 
 
 
